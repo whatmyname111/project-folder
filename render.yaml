@@ -4,3 +4,6 @@ services:
     env: python
     buildCommand: ""
     startCommand: python main.py
+    healthCheckPath: /
+    plan: free
+    envVars: []
