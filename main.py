@@ -1,12 +1,15 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, make_response
+from flask_cors import CORS
 import json
 import os
 from datetime import datetime, timedelta
 import threading
 import string
 import random
+import time
 
 app = Flask(__name__)
+CORS(app)  # Разрешаем CORS для всех доменов (можно сузить)
 
 KEYS_FILE = "keys.json"
 KEY_LENGTH = 12
@@ -45,8 +48,7 @@ def cleanup_keys():
                 del keys[k]
             if keys_to_delete:
                 save_keys(keys)
-        # Ждем 1 час перед следующей проверкой
-        threading.Event().wait(3600)
+        time.sleep(3600)
 
 @app.route('/')
 def index():
@@ -58,14 +60,26 @@ def style():
 
 @app.route('/api/get_key')
 def get_key():
+    cookie_key = request.cookies.get('user_key')
+    now = datetime.utcnow()
+
     with lock:
         keys = load_keys()
-        # Генерим уникальный ключ
+
+        if cookie_key and cookie_key in keys:
+            key_data = keys[cookie_key]
+            expires_at = datetime.fromisoformat(key_data["expires_at"])
+            if now < expires_at and not key_data["used"]:
+                resp = make_response(jsonify({"key": cookie_key}))
+                resp.set_cookie('user_key', cookie_key, max_age=KEY_TTL_HOURS*3600)
+                return resp
+
+        # Генерируем новый ключ
         while True:
             key = generate_key()
             if key not in keys:
                 break
-        now = datetime.utcnow()
+
         expires_at = now + timedelta(hours=KEY_TTL_HOURS)
         keys[key] = {
             "used": False,
@@ -73,7 +87,10 @@ def get_key():
             "expires_at": expires_at.isoformat()
         }
         save_keys(keys)
-    return jsonify({"key": key})
+
+        resp = make_response(jsonify({"key": key}))
+        resp.set_cookie('user_key', key, max_age=KEY_TTL_HOURS*3600)
+        return resp
 
 @app.route('/api/check', methods=['POST'])
 def check_key():
@@ -90,18 +107,18 @@ def check_key():
         now = datetime.utcnow()
 
         if now > expires_at:
-            return jsonify({"status": "expected"})  # истек, но в базе
+            del keys[key]
+            save_keys(keys)
+            return jsonify({"status": "expired"})
 
         if key_data["used"]:
             return jsonify({"status": "invalid"})
 
-        # Если ключ активируется впервые
         keys[key]["used"] = True
         save_keys(keys)
         return jsonify({"status": "valid"})
 
 if __name__ == '__main__':
-    # Запускаем очистку ключей в отдельном потоке
     cleaner = threading.Thread(target=cleanup_keys, daemon=True)
     cleaner.start()
     app.run(host='0.0.0.0', port=10000)
