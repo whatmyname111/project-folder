@@ -1,22 +1,35 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <title>Get Your Key</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Генерация ключа</title>
+<link rel="stylesheet" href="/style.css" />
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
 </head>
 <body>
   <div class="container">
-    <h1>Your Key:</h1>
-    <div class="key-box">{{ key }}</div>
-    <button onclick="copyKey()">Copy Key</button>
-    <p>Key is valid for 24 hours</p>
+    <h1>🔑 Ваш уникальный ключ на 24 часа</h1>
+    <div id="key" class="key-box">Загрузка...</div>
+    <button id="copyBtn" class="btn">Скопировать ключ</button>
+    <p class="desc">Ключ можно использовать один раз. Срок действия — 24 часа.</p>
   </div>
-  <script>
-    function copyKey() {
-      const text = document.querySelector(".key-box").innerText;
-      navigator.clipboard.writeText(text).then(() => alert("Key copied!"));
-    }
-  </script>
+
+<script>
+async function fetchKey() {
+    const res = await fetch('/api/get_key');
+    const data = await res.json();
+    const keyBox = document.getElementById('key');
+    keyBox.innerText = data.key;
+    keyBox.classList.add('glow');
+}
+
+document.getElementById('copyBtn').onclick = () => {
+    const key = document.getElementById('key').innerText;
+    navigator.clipboard.writeText(key).then(() => alert('Ключ скопирован!'));
+};
+
+fetchKey();
+</script>
 </body>
 </html>
