@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Get Your Key</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Your Key:</h1>
+    <div class="key-box">{{ key }}</div>
+    <button onclick="copyKey()">Copy Key</button>
+    <p>Key is valid for 24 hours</p>
+  </div>
+  <script>
+    function copyKey() {
+      const text = document.querySelector(".key-box").innerText;
+      navigator.clipboard.writeText(text).then(() => alert("Key copied!"));
+    }
+  </script>
+</body>
+</html>
