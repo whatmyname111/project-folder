@@ -1,91 +1,107 @@
-from flask import Flask, render_template, request, jsonify
-import random
-import string
+from flask import Flask, request, jsonify, send_file
 import json
 import os
-import time
 from datetime import datetime, timedelta
+import threading
+import string
+import random
 
 app = Flask(__name__)
 
-DB_FILE = "keys.json"
+KEYS_FILE = "keys.json"
 KEY_LENGTH = 12
-KEY_TTL_SECONDS = 24 * 60 * 60  # 24 часа
+KEY_TTL_HOURS = 24
 
-# Создаём файл, если его нет
-if not os.path.exists(DB_FILE):
-    with open(DB_FILE, "w") as f:
-        json.dump({}, f)
+lock = threading.Lock()
 
 def load_keys():
-    with open(DB_FILE, "r") as f:
-        return json.load(f)
+    if not os.path.exists(KEYS_FILE):
+        return {}
+    with open(KEYS_FILE, "r") as f:
+        try:
+            return json.load(f)
+        except:
+            return {}
 
-def save_keys(data):
-    with open(DB_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+def save_keys(keys):
+    with open(KEYS_FILE, "w") as f:
+        json.dump(keys, f, indent=4)
 
-def generate_key():
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=KEY_LENGTH))
+def generate_key(length=KEY_LENGTH):
+    chars = string.ascii_uppercase + string.digits
+    return ''.join(random.choice(chars) for _ in range(length))
 
-@app.route("/")
+def cleanup_keys():
+    while True:
+        with lock:
+            keys = load_keys()
+            now = datetime.utcnow()
+            keys_to_delete = []
+            for k, v in keys.items():
+                expires_at = datetime.fromisoformat(v["expires_at"])
+                if now > expires_at:
+                    keys_to_delete.append(k)
+            for k in keys_to_delete:
+                del keys[k]
+            if keys_to_delete:
+                save_keys(keys)
+        # Ждем 1 час перед следующей проверкой
+        threading.Event().wait(3600)
+
+@app.route('/')
 def index():
-    ip = request.remote_addr
-    keys = load_keys()
+    return send_file('index.html')
 
-    # Удаляем просроченные ключи
-    now = time.time()
-    keys = {k: v for k, v in keys.items() if now - v["created"] < KEY_TTL_SECONDS}
+@app.route('/style.css')
+def style():
+    return send_file('style.css')
 
-    if ip in keys:
-        key = keys[ip]["key"]
-        message = "You already received your key, use it!"
-    else:
-        key = generate_key()
-        keys[ip] = {
-            "key": key,
-            "created": now,
-            "used": False
+@app.route('/api/get_key')
+def get_key():
+    with lock:
+        keys = load_keys()
+        # Генерим уникальный ключ
+        while True:
+            key = generate_key()
+            if key not in keys:
+                break
+        now = datetime.utcnow()
+        expires_at = now + timedelta(hours=KEY_TTL_HOURS)
+        keys[key] = {
+            "used": False,
+            "created_at": now.isoformat(),
+            "expires_at": expires_at.isoformat()
         }
         save_keys(keys)
-        message = "Your key has been generated!"
+    return jsonify({"key": key})
 
-    return render_template("index.html", key=key, message=message)
+@app.route('/api/check', methods=['POST'])
+def check_key():
+    data = request.get_json(force=True)
+    key = data.get('key', '').strip().upper()
 
-@app.route("/api/check", methods=["POST"])
-def api_check():
-    data = request.get_json()
-    key = data.get("key", "").strip().upper()
+    with lock:
+        keys = load_keys()
+        if key not in keys:
+            return jsonify({"status": "invalid"})
 
-    keys = load_keys()
-    now = time.time()
+        key_data = keys[key]
+        expires_at = datetime.fromisoformat(key_data["expires_at"])
+        now = datetime.utcnow()
 
-    # Найдём запись с таким ключом (по значению key, не по ip)
-    found_entry = None
-    found_ip = None
-    for ip, info in keys.items():
-        if info["key"] == key:
-            found_entry = info
-            found_ip = ip
-            break
+        if now > expires_at:
+            return jsonify({"status": "expected"})  # истек, но в базе
 
-    if not found_entry:
-        # Ключа нет в базе
-        return jsonify({"status": "invalid"})
+        if key_data["used"]:
+            return jsonify({"status": "invalid"})
 
-    # Проверяем время жизни
-    elapsed = now - found_entry["created"]
-    if elapsed > KEY_TTL_SECONDS:
-        return jsonify({"status": "expected"})  # истек, но ещё не удалён
+        # Если ключ активируется впервые
+        keys[key]["used"] = True
+        save_keys(keys)
+        return jsonify({"status": "valid"})
 
-    # Проверяем использован ли ключ
-    if found_entry.get("used", False):
-        return jsonify({"status": "invalid"})
-
-    # Если ключ ещё не активирован - активируем
-    keys[found_ip]["used"] = True
-    save_keys(keys)
-    return jsonify({"status": "valid"})
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+if __name__ == '__main__':
+    # Запускаем очистку ключей в отдельном потоке
+    cleaner = threading.Thread(target=cleanup_keys, daemon=True)
+    cleaner.start()
+    app.run(host='0.0.0.0', port=10000)
