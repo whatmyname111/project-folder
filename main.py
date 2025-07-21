@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, send_file, make_response
-from flask-cors import CORS
+from flask_cors import CORS
 import json
 import os
 from datetime import datetime, timedelta
