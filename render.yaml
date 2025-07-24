@@ -1,16 +1,10 @@
 services:
   - type: web
-    name: flask-key-server
+    name: flask-key-app
     env: python
-    plan: free  # или выбрать нужный тариф
-    region: oregon  # или нужный регион
-    buildCommand: "pip install -r requirements.txt"
+    buildCommand: ""
     startCommand: "python main.py"
+    autoDeploy: true
     envVars:
       - key: FLASK_ENV
         value: production
-    ports:
-      - 10000
-    disk:
-      mountPath: /app
-      sizeGB: 1
