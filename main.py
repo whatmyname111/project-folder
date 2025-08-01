@@ -38,7 +38,7 @@ def init_db():
 init_db()
 
 # Генерация ключа: только строчные буквы и цифры, длина 12
-def generate_key(length=24):
+def generate_key(length=16):
     chars = string.ascii_lowercase + string.digits
     key_part = '' .join(random.choices(chars, k=length))
     return f"Tw3ch1k_{key_part}"
