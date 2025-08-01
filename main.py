@@ -84,13 +84,6 @@ def verify_key():
     if datetime.utcnow() - created_at > timedelta(hours=24):
         return "expired"
 
-    # Отметить как использованный
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute('UPDATE keys SET used = 1 WHERE key = ?', (key,))
-    conn.commit()
-    conn.close()
-
     return "valid"
 
 # Эндпоинт регистрации пользователя
