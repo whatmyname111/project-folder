@@ -41,7 +41,7 @@ def init_db():
 init_db()
 
 # Генерация ключа
-def generate_key(length=12, prefix="Free_"):
+def generate_key(length=19, prefix="Free_"):
     chars = string.ascii_lowercase + string.digits
     return prefix + ''.join(random.choices(chars, k=length))
 
