@@ -38,9 +38,10 @@ def init_db():
 init_db()
 
 # Генерация ключа: только строчные буквы и цифры, длина 12
-def generate_key(length=12):
+def generate_key(length=12, prefix="Free_"):
     chars = string.ascii_lowercase + string.digits
-    return ''.join(random.choices(chars, k=length))
+    key = ''.join(random.choices(chars, k=length))
+    return prefix + key
 
 # Эндпоинт для получения нового ключа
 @app.route('/api/get_key')
