@@ -37,6 +37,15 @@ def init_db():
 
 init_db()
 
+# Очистка старых или просроченных ключей
+def clean_expired_keys():
+    expire_before = datetime.utcnow() - timedelta(hours=24)
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute('DELETE FROM keys WHERE used = 0 AND created_at < ?', (expire_before.isoformat(),))
+    conn.commit()
+    conn.close()
+    
 # Генерация ключа: только строчные буквы и цифры, длина 12
 def generate_key(length=12, prefix="Free_"):
     chars = string.ascii_lowercase + string.digits
@@ -46,6 +55,7 @@ def generate_key(length=12, prefix="Free_"):
 # Эндпоинт для получения нового ключа
 @app.route('/api/get_key')
 def get_key():
+    clean_expired_keys()
     key = generate_key()
     created_at = datetime.utcnow().isoformat()
 
