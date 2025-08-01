@@ -65,7 +65,7 @@ def get_key():
     return jsonify({'key': key})
 
 
-# Эндпоинт: проверить ключ
+# Эндпоинт: проверить ключ (НЕ меняет состояние)
 @app.route('/api/verify_key')
 def verify_key():
     key = request.args.get('key')
@@ -91,17 +91,10 @@ def verify_key():
     if datetime.utcnow() - created_at > timedelta(hours=24):
         return "expired"
 
-    # Отмечаем ключ как использованный
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute('UPDATE keys SET used = 1 WHERE key = ?', (key,))
-    conn.commit()
-    conn.close()
-
     return "valid"
 
 
-# Эндпоинт: сохранить пользователя
+# Эндпоинт: сохранить пользователя и пометить ключ как использованный
 @app.route('/api/save_user', methods=['POST'])
 def save_user():
     data = request.json
@@ -111,6 +104,9 @@ def save_user():
     key = data.get('key', '')
 
     user_id = hwid or base64.b64encode(ip.encode()).decode()
+
+    if not key or not hwid:
+        return jsonify({'status': 'error', 'message': 'Missing hwid or key'}), 400
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
