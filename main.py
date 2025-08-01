@@ -10,10 +10,12 @@ app = Flask(__name__)
 
 DB_NAME = 'keys.db'
 
+
 # Инициализация базы данных SQLite
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
+
     # Таблица для ключей
     c.execute('''
         CREATE TABLE IF NOT EXISTS keys (
@@ -22,6 +24,7 @@ def init_db():
             used INTEGER DEFAULT 0
         )
     ''')
+
     # Таблица для пользователей
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
@@ -32,18 +35,22 @@ def init_db():
             registered_at TEXT
         )
     ''')
+
     conn.commit()
     conn.close()
 
+
 init_db()
 
-# Генерация ключа: только строчные буквы и цифры, длина 12
+
+# Генерация ключа: строчные буквы + цифры, с префиксом
 def generate_key(length=19, prefix="Free_"):
     chars = string.ascii_lowercase + string.digits
     key = ''.join(random.choices(chars, k=length))
     return prefix + key
 
-# Эндпоинт для получения нового ключа
+
+# Эндпоинт: получить новый ключ
 @app.route('/api/get_key')
 def get_key():
     key = generate_key()
@@ -57,7 +64,8 @@ def get_key():
 
     return jsonify({'key': key})
 
-# Эндпоинт для проверки ключа
+
+# Эндпоинт: проверить ключ
 @app.route('/api/verify_key')
 def verify_key():
     key = request.args.get('key')
@@ -92,7 +100,8 @@ def verify_key():
 
     return "valid"
 
-# Эндпоинт для сохранения пользователя (IP, cookies, hwid, key, дата регистрации)
+
+# Эндпоинт: сохранить пользователя
 @app.route('/api/save_user', methods=['POST'])
 def save_user():
     data = request.json
@@ -106,12 +115,11 @@ def save_user():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
 
-    # Проверяем есть ли пользователь
+    # Проверяем, зарегистрирован ли пользователь
     c.execute('SELECT key, registered_at FROM users WHERE user_id = ?', (user_id,))
     row = c.fetchone()
 
     if row:
-        # Пользователь уже есть — возвращаем его ключ и дату регистрации
         existing_key, registered_at = row
         conn.close()
         return jsonify({
@@ -120,10 +128,30 @@ def save_user():
             "registered_at": registered_at
         })
 
-    # Если пользователя нет — создаём новую запись с текущей датой
+    # Проверяем ключ
+    c.execute('SELECT created_at, used FROM keys WHERE key = ?', (key,))
+    key_row = c.fetchone()
+
+    if not key_row:
+        conn.close()
+        return jsonify({"status": "invalid_key"})
+
+    created_at_str, used = key_row
+    created_at = datetime.fromisoformat(created_at_str)
+
+    if used:
+        conn.close()
+        return jsonify({"status": "used"})
+
+    if datetime.utcnow() - created_at > timedelta(hours=24):
+        conn.close()
+        return jsonify({"status": "expired"})
+
+    # Сохраняем пользователя и помечаем ключ как использованный
     registered_at = datetime.utcnow().isoformat()
     c.execute('INSERT INTO users (user_id, cookies, hwid, key, registered_at) VALUES (?, ?, ?, ?, ?)',
               (user_id, cookies, hwid, key, registered_at))
+    c.execute('UPDATE keys SET used = 1 WHERE key = ?', (key,))
     conn.commit()
     conn.close()
 
@@ -133,16 +161,20 @@ def save_user():
         "registered_at": registered_at
     })
 
+
 # Отдача index.html
 @app.route('/')
 def serve_index():
     return send_from_directory('.', 'index.html')
+
 
 # Отдача style.css
 @app.route('/style.css')
 def serve_css():
     return send_from_directory('.', 'style.css')
 
+
+# Запуск сервера
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
