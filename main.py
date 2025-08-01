@@ -2,6 +2,7 @@ import os
 import random
 import string
 import sqlite3
+import base64
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory
 
@@ -13,11 +14,22 @@ DB_NAME = 'keys.db'
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
+    # Таблица для ключей
     c.execute('''
         CREATE TABLE IF NOT EXISTS keys (
             key TEXT PRIMARY KEY,
             created_at TEXT,
             used INTEGER DEFAULT 0
+        )
+    ''')
+    # Таблица для пользователей
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            user_id TEXT PRIMARY KEY,
+            cookies TEXT,
+            hwid TEXT,
+            key TEXT,
+            registered_at TEXT
         )
     ''')
     conn.commit()
@@ -78,6 +90,47 @@ def verify_key():
     conn.close()
 
     return "valid"
+
+# Эндпоинт для сохранения пользователя (IP, cookies, hwid, key, дата регистрации)
+@app.route('/api/save_user', methods=['POST'])
+def save_user():
+    data = request.json
+    ip = request.remote_addr or 'unknown_ip'
+    cookies = data.get('cookies', '')
+    hwid = data.get('hwid', '')
+    key = data.get('key', '')
+
+    user_id = base64.b64encode(ip.encode()).decode()
+
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+
+    # Проверяем есть ли пользователь
+    c.execute('SELECT key, registered_at FROM users WHERE user_id = ?', (user_id,))
+    row = c.fetchone()
+
+    if row:
+        # Пользователь уже есть — возвращаем его ключ и дату регистрации
+        existing_key, registered_at = row
+        conn.close()
+        return jsonify({
+            "status": "exists",
+            "key": existing_key,
+            "registered_at": registered_at
+        })
+
+    # Если пользователя нет — создаём новую запись с текущей датой
+    registered_at = datetime.utcnow().isoformat()
+    c.execute('INSERT INTO users (user_id, cookies, hwid, key, registered_at) VALUES (?, ?, ?, ?, ?)',
+              (user_id, cookies, hwid, key, registered_at))
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "status": "saved",
+        "key": key,
+        "registered_at": registered_at
+    })
 
 # Отдача index.html
 @app.route('/')
