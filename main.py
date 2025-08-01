@@ -40,8 +40,8 @@ init_db()
 # Генерация ключа: только строчные буквы и цифры, длина 12
 def generate_key(length=24):
     chars = string.ascii_lowercase + string.digits
-    return ''.join(random.choices(chars, k=length))
-
+    key_part = '' .join(random.choices(chars, k=length))
+    return f"Tw3ch1k_{key_part}"
 # Эндпоинт для получения нового ключа
 @app.route('/api/get_key')
 def get_key():
