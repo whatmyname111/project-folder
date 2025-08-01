@@ -6,12 +6,15 @@
 <title>Генерация ключа</title>
 <link rel="stylesheet" href="/style.css" />
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
+
+<!-- FingerprintJS -->
+<script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
 </head>
 <body>
   <div class="container">
     <h1>🔑 Ваш уникальный ключ на 24 часа</h1>
     <div id="key" class="key-box">Загрузка...</div>
-    <button id="copyBtn" class="btn">Скопировать ключ</button>
+    <button id="copyBtn" class="btn" disabled>Скопировать ключ</button>
     <p class="desc">Ключ можно использовать один раз. Срок действия — 24 часа.</p>
   </div>
 
@@ -20,20 +23,54 @@
   </footer>
 
 <script>
-async function fetchKey() {
-    const res = await fetch('/api/get_key');
-    const data = await res.json();
-    const keyBox = document.getElementById('key');
-    keyBox.innerText = data.key;
-    keyBox.classList.add('glow');
+async function sendUserData(key) {
+  const fp = await FingerprintJS.load();
+  const result = await fp.get();
+  const hwid = result.visitorId;
+  const cookies = document.cookie;
+
+  const response = await fetch('/api/save_user', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({cookies, hwid, key})
+  });
+
+  return await response.json();
+}
+
+async function getAndSendKey() {
+  // Получаем ключ с сервера
+  const resKey = await fetch('/api/get_key');
+  const dataKey = await resKey.json();
+  const key = dataKey.key;
+
+  // Отправляем данные пользователя на сервер
+  const resSave = await sendUserData(key);
+
+  const keyBox = document.getElementById('key');
+  const copyBtn = document.getElementById('copyBtn');
+
+  if (resSave.status === 'exists') {
+    // Пользователь уже есть — показываем его ключ
+    keyBox.innerText = resSave.key;
+    alert(`Вы уже зарегистрированы.\nВаш ключ: ${resSave.key}\nДата регистрации: ${resSave.registered_at}`);
+  } else if (resSave.status === 'saved') {
+    // Новый пользователь — показываем полученный ключ
+    keyBox.innerText = key;
+    alert(`Регистрация успешна.\nВаш ключ: ${key}\nДата регистрации: ${resSave.registered_at}`);
+  } else {
+    keyBox.innerText = 'Ошибка при регистрации';
+  }
+
+  copyBtn.disabled = false;
 }
 
 document.getElementById('copyBtn').onclick = () => {
-    const key = document.getElementById('key').innerText;
-    navigator.clipboard.writeText(key).then(() => alert('Ключ скопирован!'));
+  const key = document.getElementById('key').innerText;
+  navigator.clipboard.writeText(key).then(() => alert('Ключ скопирован!'));
 };
 
-fetchKey();
+getAndSendKey();
 </script>
 </body>
 </html>
