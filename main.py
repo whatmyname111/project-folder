@@ -37,18 +37,24 @@ def init_db():
 
 init_db()
 
-# Генерация ключа: только строчные буквы и цифры, длина 12
+def get_db_connection():
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# Генерация ключа: только строчные буквы и цифры, длина 16
 def generate_key(length=16):
     chars = string.ascii_lowercase + string.digits
-    key_part = '' .join(random.choices(chars, k=length))
+    key_part = ''.join(random.choices(chars, k=length))
     return f"Tw3ch1k_{key_part}"
+
 # Эндпоинт для получения нового ключа
 @app.route('/api/get_key')
 def get_key():
     key = generate_key()
     created_at = datetime.utcnow().isoformat()
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute('INSERT INTO keys (key, created_at, used) VALUES (?, ?, 0)', (key, created_at))
     conn.commit()
@@ -64,7 +70,7 @@ def verify_key():
     if not key:
         return "invalid"
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute('SELECT created_at, used FROM keys WHERE key = ?', (key,))
     row = c.fetchone()
@@ -73,7 +79,7 @@ def verify_key():
     if not row:
         return "invalid"
 
-    created_at_str, used = row
+    created_at_str, used = row['created_at'], row['used']
     created_at = datetime.fromisoformat(created_at_str)
 
     if used:
@@ -83,7 +89,7 @@ def verify_key():
         return "expired"
 
     # Отмечаем ключ как использованный
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute('UPDATE keys SET used = 1 WHERE key = ?', (key,))
     conn.commit()
@@ -102,7 +108,7 @@ def save_user():
 
     user_id = hwid or base64.b64encode(ip.encode()).decode()
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db_connection()
     c = conn.cursor()
 
     # Проверяем есть ли пользователь
@@ -110,8 +116,7 @@ def save_user():
     row = c.fetchone()
 
     if row:
-        # Пользователь уже есть — возвращаем его ключ и дату регистрации
-        existing_key, registered_at = row
+        existing_key, registered_at = row['key'], row['registered_at']
         conn.close()
         return jsonify({
             "status": "exists",
