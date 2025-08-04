@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Генерация ключа</title>
-<link rel="stylesheet" href="/style.css" />
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Генерация ключа</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
 
-<!-- FingerprintJS -->
-<script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
+  <!-- FingerprintJS -->
+  <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -22,55 +22,47 @@
     © 2025, by: Tw3ch1k_scripts in Render.com
   </footer>
 
-<script>
-async function sendUserData(key) {
-  const fp = await FingerprintJS.load();
-  const result = await fp.get();
-  const hwid = result.visitorId;
-  const cookies = document.cookie;
+  <script>
+    async function sendUserData() {
+      const fp = await FingerprintJS.load();
+      const result = await fp.get();
+      const hwid = result.visitorId;
+      const cookies = document.cookie;
 
-  const response = await fetch('/api/save_user', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({cookies, hwid, key})
-  });
+      const response = await fetch('/api/save_user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cookies, hwid })
+      });
 
-  return await response.json();
-}
+      return await response.json();
+    }
 
-async function getAndSendKey() {
-  // Получаем ключ с сервера
-  const resKey = await fetch('/api/get_key');
-  const dataKey = await resKey.json();
-  const key = dataKey.key;
+    async function getAndShowKey() {
+      const resSave = await sendUserData();
 
-  // Отправляем данные пользователя на сервер
-  const resSave = await sendUserData(key);
+      const keyBox = document.getElementById('key');
+      const copyBtn = document.getElementById('copyBtn');
 
-  const keyBox = document.getElementById('key');
-  const copyBtn = document.getElementById('copyBtn');
+      if (resSave.status === 'exists') {
+        keyBox.innerText = resSave.key;
+        alert(`Вы уже зарегистрированы.\nВаш ключ: ${resSave.key}\nДата регистрации: ${resSave.registered_at}`);
+      } else if (resSave.status === 'saved') {
+        keyBox.innerText = resSave.key;
+        alert(`Регистрация успешна.\nВаш ключ: ${resSave.key}\nДата регистрации: ${resSave.registered_at}`);
+      } else {
+        keyBox.innerText = 'Ошибка при регистрации';
+      }
 
-  if (resSave.status === 'exists') {
-    // Пользователь уже есть — показываем его ключ
-    keyBox.innerText = resSave.key;
-    alert(`Вы уже зарегистрированы.\nВаш ключ: ${resSave.key}\nДата регистрации: ${resSave.registered_at}`);
-  } else if (resSave.status === 'saved') {
-    // Новый пользователь — показываем полученный ключ
-    keyBox.innerText = key;
-    alert(`Регистрация успешна.\nВаш ключ: ${key}\nДата регистрации: ${resSave.registered_at}`);
-  } else {
-    keyBox.innerText = 'Ошибка при регистрации';
-  }
+      copyBtn.disabled = false;
+    }
 
-  copyBtn.disabled = false;
-}
+    document.getElementById('copyBtn').onclick = () => {
+      const key = document.getElementById('key').innerText;
+      navigator.clipboard.writeText(key).then(() => alert('Ключ скопирован!'));
+    };
 
-document.getElementById('copyBtn').onclick = () => {
-  const key = document.getElementById('key').innerText;
-  navigator.clipboard.writeText(key).then(() => alert('Ключ скопирован!'));
-};
-
-getAndSendKey();
-</script>
+    getAndShowKey();
+  </script>
 </body>
 </html>
