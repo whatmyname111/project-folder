@@ -2,13 +2,15 @@ import os
 import random
 import base64
 import requests
+import load_dotenv from dotenv
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory
 
+load_dotenv("/etc/secrets/.env")
 app = Flask(__name__)
 
-SUPABASE_URL = os.environ.get('SUPABASE_URL')
-SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 SUPABASE_HEADERS = {
     'apikey': SUPABASE_KEY,
     'Authorization': f'Bearer {SUPABASE_KEY}',
