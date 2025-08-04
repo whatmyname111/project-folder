@@ -213,8 +213,8 @@ def delete_key():
     return f"Failed to delete: {res.text}", 500
 
 
-@app.route('/api/delete_user')
-def delete_user():
+    @app.route('/api/delete_user')
+    def delete_user():
     user_id = request.args.get('user_id')
     if not user_id:
         return "Missing user_id", 400
@@ -223,6 +223,7 @@ def delete_user():
     if res.status_code == 204:
         return "User deleted"
     return f"Failed to delete: {res.text}", 500
+    
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
