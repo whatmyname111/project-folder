@@ -202,7 +202,7 @@ def admin_panel():
     return html
 
     @app.route('/api/delete_key')
-def delete_key():
+    def delete_key():
     key = request.args.get('key')
     if not key:
         return "Missing key", 400
