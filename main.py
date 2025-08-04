@@ -7,8 +7,8 @@ from flask import Flask, request, jsonify, send_from_directory
 
 app = Flask(__name__)
 
-SUPABASE_URL = 'https://kuhunkdgbtedgrujwxoy.supabase.co'
-SUPABASE_KEY = os.environ.get('SUPABASE_KEY') or 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt1aHVua2RnYnRlZGdydWp3eG95Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyOTMyODEsImV4cCI6MjA2OTg2OTI4MX0.N5I9bGTroqMDD9g0b-3lqMMip0NFRDTH30dh_hQ9kJY'
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 SUPABASE_HEADERS = {
     'apikey': SUPABASE_KEY,
     'Authorization': f'Bearer {SUPABASE_KEY}',
