@@ -88,22 +88,19 @@ def verify_key():
 
 @app.route('/api/save_user', methods=['POST'])
 def save_user():
+    alr_exit = False
     data = request.json
     ip = request.remote_addr or 'unknown_ip'
     cookies = data.get('cookies', '')
     hwid = data.get('hwid', '')
-
-    # Ищем пользователя по hwid или ip
     user_id = hwid or base64.b64encode(ip.encode()).decode()
-
-    # Проверяем, есть ли уже такой пользователь
+    key = data.get('key', '')
     res = requests.get(f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{user_id}", headers=SUPABASE_HEADERS)
     if res.status_code != 200:
         return jsonify({"error": "Failed to query user", "details": res.text}), 500
-
     users = res.json()
     if users:
-        # Пользователь найден, возвращаем его ключ
+        alr_exit = True
         user = users[0]
         return jsonify({
             "status": "exists",
@@ -112,13 +109,16 @@ def save_user():
         })
 
     # Пользователь новый — генерируем ключ и сохраняем в keys
-    key = generate_key()
-    created_at = datetime.utcnow().isoformat()
-    key_data = {
-        "key": key,
-        "created_at": created_at,
-        "used": False
-    }
+    if not key:
+        key = generate_key()
+    else:
+        key = key
+        created_at = datetime.utcnow().isoformat()
+        key_data = {
+            "key": key,
+            "created_at": created_at,
+            "used": False
+        }
     key_res = requests.post(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, json=key_data)
     if key_res.status_code != 201:
         return jsonify({"error": "Failed to save key", "details": key_res.text}), 500
