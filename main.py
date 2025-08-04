@@ -139,7 +139,90 @@ def serve_index():
 @app.route('/style.css')
 def serve_css():
     return send_from_directory('.', 'style.css')
+@app.route('/user/admin')
+def admin_panel():
+    access_key = request.args.get('d')
+    if access_key != '22042013':
+        return "Access denied", 403
 
+    # Получаем ключи
+    keys_res = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS)
+    users_res = requests.get(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS)
+
+    if keys_res.status_code != 200 or users_res.status_code != 200:
+        return "Failed to load data", 500
+
+    keys = keys_res.json()
+    users = users_res.json()
+
+    html = """
+    <html>
+    <head>
+        <title>Admin Panel</title>
+        <style>
+            body { font-family: monospace; background: #121212; color: #eee; padding: 20px; }
+            table { border-collapse: collapse; margin-bottom: 30px; width: 100%; }
+            th, td { border: 1px solid #666; padding: 8px; text-align: left; }
+            th { background: #222; }
+            button { background: #f33; color: white; border: none; padding: 4px 8px; cursor: pointer; }
+        </style>
+        <script>
+            async function deleteKey(key) {
+                const res = await fetch('/api/delete_key?key=' + encodeURIComponent(key));
+                alert(await res.text());
+                location.reload();
+            }
+            async function deleteUser(id) {
+                const res = await fetch('/api/delete_user?user_id=' + encodeURIComponent(id));
+                alert(await res.text());
+                location.reload();
+            }
+        </script>
+    </head>
+    <body>
+        <h1>🔑 Keys</h1>
+        <table>
+            <tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>
+    """
+
+    for k in keys:
+        html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td><td><button onclick=\"deleteKey('{k['key']}')\">Delete</button></td></tr>"
+
+    html += """
+        </table>
+        <h1>👤 Users</h1>
+        <table>
+            <tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th><th>Action</th></tr>
+    """
+
+    for u in users:
+        html += f"<tr><td>{u['user_id']}</td><td>{u['hwid']}</td><td>{u['cookies']}</td><td>{u['key']}</td><td>{u['registered_at']}</td><td><button onclick=\"deleteUser('{u['user_id']}')\">Delete</button></td></tr>"
+
+    html += "</table></body></html>"
+    return html
+
+    @app.route('/api/delete_key')
+def delete_key():
+    key = request.args.get('key')
+    if not key:
+        return "Missing key", 400
+
+    res = requests.delete(f"{SUPABASE_URL}/rest/v1/keys?key=eq.{key}", headers=SUPABASE_HEADERS)
+    if res.status_code == 204:
+        return "Key deleted"
+    return f"Failed to delete: {res.text}", 500
+
+
+@app.route('/api/delete_user')
+def delete_user():
+    user_id = request.args.get('user_id')
+    if not user_id:
+        return "Missing user_id", 400
+
+    res = requests.delete(f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{user_id}", headers=SUPABASE_HEADERS)
+    if res.status_code == 204:
+        return "User deleted"
+    return f"Failed to delete: {res.text}", 500
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
