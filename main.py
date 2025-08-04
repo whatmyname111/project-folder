@@ -2,7 +2,7 @@ import os
 import random
 import base64
 import requests
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory
 
 app = Flask(__name__)
@@ -31,17 +31,17 @@ def generate_key(length=16):
         letters = random.sample(CUSTOM_LETTERS, k=letters_count)
     else:
         letters = random.choices(CUSTOM_LETTERS, k=letters_count)
+
     key_chars = digits + letters
     random.shuffle(key_chars)
     key = ''.join(key_chars)
-
     ddp = '-'.join([key[i:i+4] for i in range(0, len(key), 4)])
     return f"Tw3ch1k_{ddp}"
 
 @app.route('/api/get_key')
 def get_key():
     key = generate_key()
-    created_at = datetime.now(timezone.utc).isoformat()
+    created_at = datetime.utcnow().isoformat()
 
     data = {
         "key": key,
@@ -68,13 +68,12 @@ def verify_key():
 
     key_data = res.json()[0]
     created_at = datetime.fromisoformat(key_data['created_at'])
-    now = datetime.now(timezone.utc)
     used = key_data['used']
 
     if used:
         return "used"
 
-    if now - created_at > timedelta(hours=24):
+    if datetime.utcnow() - created_at > timedelta(hours=24):
         return "expired"
 
     update_res = requests.patch(
@@ -93,23 +92,39 @@ def save_user():
     ip = request.remote_addr or 'unknown_ip'
     cookies = data.get('cookies', '')
     hwid = data.get('hwid', '')
-    key = data.get('key', '')
 
+    # Ищем пользователя по hwid или ip
     user_id = hwid or base64.b64encode(ip.encode()).decode()
 
+    # Проверяем, есть ли уже такой пользователь
     res = requests.get(f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{user_id}", headers=SUPABASE_HEADERS)
     if res.status_code != 200:
         return jsonify({"error": "Failed to query user", "details": res.text}), 500
 
-    rows = res.json()
-    if rows:
+    users = res.json()
+    if users:
+        # Пользователь найден, возвращаем его ключ
+        user = users[0]
         return jsonify({
             "status": "exists",
-            "key": rows[0]["key"],
-            "registered_at": rows[0]["registered_at"]
+            "key": user["key"],
+            "registered_at": user["registered_at"]
         })
 
-    registered_at = datetime.now(timezone.utc).isoformat()
+    # Пользователь новый — генерируем ключ и сохраняем в keys
+    key = generate_key()
+    created_at = datetime.utcnow().isoformat()
+    key_data = {
+        "key": key,
+        "created_at": created_at,
+        "used": False
+    }
+    key_res = requests.post(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, json=key_data)
+    if key_res.status_code != 201:
+        return jsonify({"error": "Failed to save key", "details": key_res.text}), 500
+
+    # Сохраняем пользователя с новым ключом
+    registered_at = created_at
     user_data = {
         "user_id": user_id,
         "cookies": cookies,
@@ -117,16 +132,15 @@ def save_user():
         "key": key,
         "registered_at": registered_at
     }
-
-    res = requests.post(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS, json=user_data)
-    if res.status_code == 201:
+    user_res = requests.post(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS, json=user_data)
+    if user_res.status_code == 201:
         return jsonify({
             "status": "saved",
             "key": key,
             "registered_at": registered_at
         })
     else:
-        return jsonify({"error": "Failed to save user", "details": res.text}), 500
+        return jsonify({"error": "Failed to save user", "details": user_res.text}), 500
 
 @app.route('/')
 def serve_index():
