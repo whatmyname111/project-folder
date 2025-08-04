@@ -2,9 +2,8 @@ import os
 import random
 import base64
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Flask, request, jsonify, send_from_directory
-from dateutil.parser import isoparse  # <-- импорт для корректного парсинга даты
 
 app = Flask(__name__)
 
@@ -32,18 +31,17 @@ def generate_key(length=16):
         letters = random.sample(CUSTOM_LETTERS, k=letters_count)
     else:
         letters = random.choices(CUSTOM_LETTERS, k=letters_count)
-
     key_chars = digits + letters
     random.shuffle(key_chars)
     key = ''.join(key_chars)
 
     ddp = '-'.join([key[i:i+4] for i in range(0, len(key), 4)])
     return f"Tw3ch1k_{ddp}"
-    
+
 @app.route('/api/get_key')
 def get_key():
     key = generate_key()
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.now(timezone.utc).isoformat()
 
     data = {
         "key": key,
@@ -64,37 +62,30 @@ def verify_key():
     if not key:
         return "invalid"
 
-    try:
-        res = requests.get(f"{SUPABASE_URL}/rest/v1/keys?key=eq.{key}", headers=SUPABASE_HEADERS)
-        if res.status_code != 200:
-            return "invalid"
+    res = requests.get(f"{SUPABASE_URL}/rest/v1/keys?key=eq.{key}", headers=SUPABASE_HEADERS)
+    if res.status_code != 200 or not res.json():
+        return "invalid"
 
-        data = res.json()
-        if not data:
-            return "invalid"
+    key_data = res.json()[0]
+    created_at = datetime.fromisoformat(key_data['created_at'])
+    now = datetime.now(timezone.utc)
+    used = key_data['used']
 
-        key_data = data[0]
-        created_at = isoparse(key_data['created_at'])  # <-- исправлено
-        used = key_data['used']
+    if used:
+        return "used"
 
-        if used:
-            return "used"
+    if now - created_at > timedelta(hours=24):
+        return "expired"
 
-        if datetime.utcnow() - created_at > timedelta(hours=24):
-            return "expired"
-
-        update_res = requests.patch(
-            f"{SUPABASE_URL}/rest/v1/keys?key=eq.{key}",
-            headers=SUPABASE_HEADERS,
-            json={"used": True}
-        )
-        if update_res.status_code == 204:
-            return "valid"
-        else:
-            return "error"
-
-    except Exception as e:
-        return f"Server error: {e}", 500
+    update_res = requests.patch(
+        f"{SUPABASE_URL}/rest/v1/keys?key=eq.{key}",
+        headers=SUPABASE_HEADERS,
+        json={"used": True}
+    )
+    if update_res.status_code == 204:
+        return "valid"
+    else:
+        return "error"
 
 @app.route('/api/save_user', methods=['POST'])
 def save_user():
@@ -118,7 +109,7 @@ def save_user():
             "registered_at": rows[0]["registered_at"]
         })
 
-    registered_at = datetime.utcnow().isoformat()
+    registered_at = datetime.now(timezone.utc).isoformat()
     user_data = {
         "user_id": user_id,
         "cookies": cookies,
