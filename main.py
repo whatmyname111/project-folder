@@ -17,10 +17,16 @@ SUPABASE_HEADERS = {
 }
 
 def generate_key(length=16):
-    chars = string.ascii_lowercase + string.digits
-    key_part = ''.join(random.choices(chars, k=length))
-    return f"Tw3ch1k_{key_part}"
-
+    CUSTOM_LETTERS = 'aoItlcxrfbwnO'
+    CUSTOM_DIGITS = '1236890'
+    digits_count = int(length * 0.7)
+    letters_count = length - digits_count
+    digits = random.choices(CUSTOM_DIGITS, k=digits_count)
+    letters = random.choices(CUSTOM_LETTERS, k=letters_count)
+    key_chars = digits + letters
+    random.shuffle(key_chars)
+    key = ''.join(key_chars)
+    return f"Tw3ch1k_{key}"
 @app.route('/api/get_key')
 def get_key():
     key = generate_key()
