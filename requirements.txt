@@ -2,3 +2,4 @@ Flask==2.3.2
 Flask-cors
 requests
 python-dotenv
+Crypto
