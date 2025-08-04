@@ -6,7 +6,6 @@
   <title>Генерация ключа</title>
   <link rel="stylesheet" href="/style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
-
   <!-- FingerprintJS -->
   <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
 </head>
@@ -29,16 +28,18 @@
       const hwid = result.visitorId;
       const cookies = document.cookie;
 
+      // Отправляем на сервер данные без ключа,
+      // сервер сгенерирует ключ, если нужно, и вернёт его
       const response = await fetch('/api/save_user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ cookies, hwid })
       });
 
       return await response.json();
     }
 
-    async function getAndShowKey() {
+    async function displayKey() {
       const resSave = await sendUserData();
 
       const keyBox = document.getElementById('key');
@@ -62,7 +63,7 @@
       navigator.clipboard.writeText(key).then(() => alert('Ключ скопирован!'));
     };
 
-    getAndShowKey();
+    displayKey();
   </script>
 </body>
 </html>
