@@ -38,24 +38,6 @@ def generate_key(length=16):
     ddp = '-'.join([key[i:i+4] for i in range(0, len(key), 4)])
     return f"Tw3ch1k_{ddp}"
 
-@app.route('/api/get_key')
-def get_key():
-    key = generate_key()
-    created_at = datetime.utcnow().isoformat()
-
-    data = {
-        "key": key,
-        "created_at": created_at,
-        "used": False
-    }
-
-    res = requests.post(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, json=data)
-
-    if res.status_code == 201:
-        return jsonify({"key": key})
-    else:
-        return jsonify({"error": "Failed to save key", "details": res.text}), 500
-
 @app.route('/api/verify_key')
 def verify_key():
     key = request.args.get('key')
