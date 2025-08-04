@@ -92,47 +92,51 @@ def save_user():
     ip = request.remote_addr or 'unknown_ip'
     cookies = data.get('cookies', '')
     hwid = data.get('hwid', '')
-    user_id = hwid or base64.b64encode(ip.encode()).decode()
-    key = data.get('key', '') or generate_key()  # Генерируем ключ, если не передан
 
-    # Проверяем, есть ли пользователь
+    # Ищем пользователя по hwid или ip
+    user_id = hwid or base64.b64encode(ip.encode()).decode()
+
+    # Проверяем, есть ли уже такой пользователь
     res = requests.get(f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{user_id}", headers=SUPABASE_HEADERS)
     if res.status_code != 200:
         return jsonify({"error": "Failed to query user", "details": res.text}), 500
 
-    if res.json():  # Если пользователь уже есть
-        existing_user = res.json()[0]
+    users = res.json()
+    if users:
+        # Пользователь найден, возвращаем его ключ
+        user = users[0]
         return jsonify({
             "status": "exists",
-            "key": existing_user["key"],
-            "registered_at": existing_user["registered_at"]
+            "key": user["key"],
+            "registered_at": user["registered_at"]
         })
-
-    # Сохраняем ключ в Supabase (независимо от того, был ли он передан или сгенерирован)
-    key_data = {
-        "key": key,
-        "created_at": datetime.utcnow().isoformat(),
-        "used": False
-    }
+    else:
+        key = generate_key()
+        created_at = datetime.utcnow().isoformat()
+        key_data = {
+            "key": key,
+            "created_at": created_at,
+            "used": False
+        }
     key_res = requests.post(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, json=key_data)
     if key_res.status_code != 201:
         return jsonify({"error": "Failed to save key", "details": key_res.text}), 500
 
-    # Сохраняем пользователя
+    # Сохраняем пользователя с новым ключом
+    registered_at = created_at
     user_data = {
         "user_id": user_id,
         "cookies": cookies,
         "hwid": hwid,
         "key": key,
-        "registered_at": datetime.utcnow().isoformat()
+        "registered_at": registered_at
     }
     user_res = requests.post(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS, json=user_data)
-    
     if user_res.status_code == 201:
         return jsonify({
             "status": "saved",
             "key": key,
-            "registered_at": user_data["registered_at"]
+            "registered_at": registered_at
         })
     else:
         return jsonify({"error": "Failed to save user", "details": user_res.text}), 500
