@@ -1,6 +1,5 @@
 import os
 import random
-import string
 import base64
 import requests
 from datetime import datetime, timedelta
@@ -40,7 +39,7 @@ def generate_key(length=16):
     # Группировка по 4 через дефисы
     ddp = '-'.join([key[i:i+4] for i in range(0, len(key), 4)])
     return f"Tw3ch1k_{ddp}"
-    
+
 @app.route('/api/get_key')
 def get_key():
     key = generate_key()
@@ -139,6 +138,7 @@ def serve_index():
 @app.route('/style.css')
 def serve_css():
     return send_from_directory('.', 'style.css')
+
 @app.route('/user/admin')
 def admin_panel():
     access_key = request.args.get('d')
@@ -201,8 +201,8 @@ def admin_panel():
     html += "</table></body></html>"
     return html
 
-    @app.route('/api/delete_key')
-    def delete_key():
+@app.route('/api/delete_key')
+def delete_key():
     key = request.args.get('key')
     if not key:
         return "Missing key", 400
@@ -212,9 +212,8 @@ def admin_panel():
         return "Key deleted"
     return f"Failed to delete: {res.text}", 500
 
-
-    @app.route('/api/delete_user')
-    def delete_user():
+@app.route('/api/delete_user')
+def delete_user():
     user_id = request.args.get('user_id')
     if not user_id:
         return "Missing user_id", 400
@@ -223,7 +222,7 @@ def admin_panel():
     if res.status_code == 204:
         return "User deleted"
     return f"Failed to delete: {res.text}", 500
-    
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
