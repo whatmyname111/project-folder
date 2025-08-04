@@ -17,16 +17,30 @@ SUPABASE_HEADERS = {
 }
 
 def generate_key(length=16):
-    CUSTOM_LETTERS = 'aoItlcxrfbwnO'
-    CUSTOM_DIGITS = '1236890'
+    CUSTOM_LETTERS = 'oasuxclO'
+    CUSTOM_DIGITS = '68901'
+
     digits_count = int(length * 0.7)
     letters_count = length - digits_count
-    digits = random.choices(CUSTOM_DIGITS, k=digits_count)
-    letters = random.choices(CUSTOM_LETTERS, k=letters_count)
+
+    # Берём уникально если можно, иначе допускаем повторения
+    if digits_count <= len(CUSTOM_DIGITS):
+        digits = random.sample(CUSTOM_DIGITS, k=digits_count)
+    else:
+        digits = random.choices(CUSTOM_DIGITS, k=digits_count)
+
+    if letters_count <= len(CUSTOM_LETTERS):
+        letters = random.sample(CUSTOM_LETTERS, k=letters_count)
+    else:
+        letters = random.choices(CUSTOM_LETTERS, k=letters_count)
     key_chars = digits + letters
     random.shuffle(key_chars)
     key = ''.join(key_chars)
-    return f"Tw3ch1k_{key}"
+
+    # Группировка по 4 через дефисы
+    ddp = '-'.join([key[i:i+4] for i in range(0, len(key), 4)])
+    return f"Tw3ch1k_{ddp}"
+    
 @app.route('/api/get_key')
 def get_key():
     key = generate_key()
