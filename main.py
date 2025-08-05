@@ -63,23 +63,26 @@ def get_key():
 def verify_key():
     key = request.args.get('key')
     if not key:
-        return jsonify({"status": "invalid"})
+        return "invalid", 200, {'Content-Type': 'text/plain'}
 
     res = requests.get(f"{SUPABASE_URL}/rest/v1/keys?key=eq.{key}", headers=SUPABASE_HEADERS)
     if res.status_code != 200 or not res.json():
-        return jsonify({"status": "invalid"})
+        return "invalid", 200, {'Content-Type': 'text/plain'}
 
     key_data = res.json()[0]
     if key_data["used"]:
-        return jsonify({"status": "used"})
+        return "used", 200, {'Content-Type': 'text/plain'}
 
     created_at = datetime.fromisoformat(key_data["created_at"].replace("Z", "+00:00"))
     if datetime.now(timezone.utc) - created_at > timedelta(hours=24):
-        return jsonify({"status": "expired"})
+        return "expired", 200, {'Content-Type': 'text/plain'}
 
     update = requests.patch(f"{SUPABASE_URL}/rest/v1/keys?key=eq.{key}",
                             headers=SUPABASE_HEADERS, json={"used": True})
-    return jsonify({"status": "valid" if update.status_code == 204 else "error"})
+    if update.status_code == 204:
+        return "valid", 200, {'Content-Type': 'text/plain'}
+    else:
+        return "error", 500, {'Content-Type': 'text/plain'}
 
 @app.route('/api/save_user', methods=['POST'])
 @limiter.limit("5/minute")
