@@ -3,7 +3,7 @@ import random
 import base64
 import requests
 from dotenv import load_dotenv
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory
 
 load_dotenv("/etc/secrets/.env")
@@ -43,51 +43,26 @@ def get_key():
     res = requests.post(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, json=data)
     return jsonify({"key": key}) if res.status_code == 201 else jsonify({"error": "Failed to save key"}), 500
 
-@app.route("/api/verify_key", methods=["GET"])
+
+@app.route('/api/verify_key')
 def verify_key():
-    user_key = request.args.get("key")
-    if not user_key:
-        return jsonify({"error": "missing key"}), 400
-
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-    }
-
-    params = {
-        "select": "*",
-        "key": f"eq.{user_key}"
-    }
-
-    response = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=headers, params=params)
-
-    if response.status_code != 200:
-        return jsonify({"error": "database error"}), 500
-
-    data = response.json()
-    if not data:
-        return jsonify({"status": "not_found"})
-
-    key_data = data[0]
-
-    try:
-        # Убедимся, что created_at — это offset-aware datetime
-        created_at_raw = key_data["created_at"].replace("Z", "+00:00")
-        created_at = datetime.fromisoformat(created_at_raw)
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
-    except Exception as e:
-        return jsonify({"error": f"invalid created_at format: {e}"}), 500
-
-    now_utc = datetime.now(timezone.utc)
-
-    if now_utc - created_at > timedelta(hours=24):
-        return jsonify({"status": "expired"})
-
-    if key_data.get("used") is True:
-        return jsonify({"status": "used"})
-
-    return jsonify({"status": "valid"})
+    key = request.args.get('key')
+    if not key:
+        return "invalid"
+    res = requests.get(f"{SUPABASE_URL}/rest/v1/keys?key=eq.{key}", headers=SUPABASE_HEADERS)
+    if res.status_code != 200 or not res.json():
+        return "invalid"
+    key_data = res.json()[0]
+    if key_data["used"]:
+        return "used"
+    if datetime.utcnow() - datetime.fromisoformat(key_data["created_at"]) > timedelta(hours=24):
+        return "expired"
+    update_res = requests.patch(
+        f"{SUPABASE_URL}/rest/v1/keys?key=eq.{key}",
+        headers=SUPABASE_HEADERS,
+        json={"used": True}
+    )
+    return "valid" if update_res.status_code == 204 else "error"
 
 @app.route('/api/save_user', methods=['POST'])
 def save_user():
@@ -167,8 +142,8 @@ def serve_css():
 
 @app.route('/user/admin')
 def admin_panel():
-    access_key = request.args.get('d')
-    if access_key != '22042013':
+    access_key = os.getenv("ADMIN_KEY")
+    if access_key != os.getenv("ADMIN_KEY")
         return "Access denied", 403
 
     keys_res = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS)
