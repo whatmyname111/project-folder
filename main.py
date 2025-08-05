@@ -57,7 +57,6 @@ def verify_key():
     if key_data["used"]:
         return "used"
 
-    # Правильные отступы здесь!
     created_at = datetime.fromisoformat(key_data["created_at"].replace("Z", "+00:00"))
     now = datetime.now(timezone.utc)
     if now - created_at > timedelta(hours=24):
@@ -78,7 +77,7 @@ def save_user():
     hwid = data.get('hwid', '')
     key = data.get('key', '')
 
-    user_id = hwid or base64.b64encode(ip.encode()).decode()
+    user_id = hwid
 
     # 1. Проверяем, есть ли пользователь
     user_res = requests.get(f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{user_id}", headers=SUPABASE_HEADERS)
