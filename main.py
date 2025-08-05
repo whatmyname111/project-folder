@@ -3,7 +3,7 @@ import random
 import base64
 import requests
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Flask, request, jsonify, send_from_directory
 
 load_dotenv("/etc/secrets/.env")
@@ -42,21 +42,27 @@ def get_key():
     data = {"key": key, "created_at": created_at, "used": False}
     res = requests.post(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, json=data)
     return jsonify({"key": key}) if res.status_code == 201 else jsonify({"error": "Failed to save key"}), 500
-
-
 @app.route('/api/verify_key')
 def verify_key():
     key = request.args.get('key')
     if not key:
         return "invalid"
+
     res = requests.get(f"{SUPABASE_URL}/rest/v1/keys?key=eq.{key}", headers=SUPABASE_HEADERS)
     if res.status_code != 200 or not res.json():
         return "invalid"
+
     key_data = res.json()[0]
+
     if key_data["used"]:
         return "used"
-    if datetime.utcnow() - datetime.fromisoformat(key_data["created_at"]) > timedelta(hours=24):
+
+    # Правильные отступы здесь!
+    created_at = datetime.fromisoformat(key_data["created_at"].replace("Z", "+00:00"))
+    now = datetime.now(timezone.utc)
+    if now - created_at > timedelta(hours=24):
         return "expired"
+
     update_res = requests.patch(
         f"{SUPABASE_URL}/rest/v1/keys?key=eq.{key}",
         headers=SUPABASE_HEADERS,
@@ -142,9 +148,9 @@ def serve_css():
 
 @app.route('/user/admin')
 def admin_panel():
-    access_key = os.getenv("ADMIN_KEY")
-    if access_key != os.getenv("ADMIN_KEY")
-        return "Access denied", 403
+    access_key = request.args.get('d')
+    if access_key != os.getenv("ADMIN_KEY"):
+       return "Access denied", 403
 
     keys_res = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS)
     users_res = requests.get(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS)
