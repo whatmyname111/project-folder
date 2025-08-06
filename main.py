@@ -49,7 +49,38 @@ def get_user_id(ip, hwid):
     return base64.b64encode(f"{ip}_{hwid}".encode()).decode()
 
 # === ROUTES ===
+@app.route('/api/clean_old_keys', methods=['POST'])
+def clean_old_keys():
+    data = request.get_json()
+    if not data or data.get("admin") != ADMIN_KEY:
+        return jsonify({"error": "Access denied"}), 403
 
+    res = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS)
+    if res.status_code != 200:
+        return jsonify({"error": "Failed to fetch keys", "details": res.text}), 500
+
+    keys = res.json()
+    now = datetime.now(timezone.utc)
+    deleted = 0
+
+    for key in keys:
+        created_at_str = key.get("created_at")
+        if not created_at_str:
+            continue
+        try:
+            created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+        except Exception:
+            continue
+
+        if now - created_at > timedelta(hours=24):
+            delete = requests.delete(
+                f"{SUPABASE_URL}/rest/v1/keys?id=eq.{key['key']}",
+                headers=SUPABASE_HEADERS
+            )
+            if delete.status_code == 204:
+                deleted += 1
+
+    return jsonify({"message": f"🧹 Удалено ключей: {deleted}"})
 @app.route('/api/get_key')
 @limiter.limit("10/minute")
 def get_key():
@@ -170,7 +201,9 @@ def admin_panel():
             location.reload();
         }
     </script></head><body>
-    <h1>🔑 Keys</h1><table><tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>"""
+    <h1>🔑 Keys</h1>
+    <h2>🧹 Очистка</h2>
+<button onclick="del('/api/clean_old_keys', {admin: '""" + ADMIN_KEY + """' })">Удалить ключи старше 24ч</button><table><tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>"""
     for k in keys:
         html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td><td><button onclick=\"del('/api/delete_key', {{key: '{k['key']}'}})\">Delete</button></td></tr>"
     html += "</table><h1>👤 Users</h1><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th><th>Action</th></tr>"
