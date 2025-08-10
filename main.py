@@ -74,13 +74,13 @@ def clean_old_keys():
 
         if now - created_at > timedelta(hours=24):
             delete = requests.delete(
-                f"{SUPABASE_URL}/rest/v1/keys?id=eq.{key['key']}",
+                f"{SUPABASE_URL}/rest/v1/keys?id=eq.{key['id']}",
                 headers=SUPABASE_HEADERS
             )
             if delete.status_code == 204:
                 deleted += 1
 
-    return jsonify({"message": f"🧹 Удалено ключей: {deleted}"})
+    return "🧹 Удалено ключей: {deleted}"
 @app.route('/api/get_key')
 @limiter.limit("10/minute")
 def get_key():
