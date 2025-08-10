@@ -17,7 +17,7 @@ load_dotenv("/etc/secrets/.env")
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 ADMIN_KEY = os.getenv("ADMIN_KEY")
-ADMIN_IP = os.getenv("ADMIN_IP")  # Строго один IP для админки (можно оставить пустым для отключения)
+ADMIN_IP = os.getenv("ADMIN_IP")
 
 # -------------- Flask init --------------
 app = Flask(__name__)
@@ -46,8 +46,6 @@ def validate_ip(ip):
 def is_admin_request():
     # Проверка ключа и IP (если задан)
     if request.headers.get("X-Admin-Key") != ADMIN_KEY:
-        return False
-    if ADMIN_IP and request.remote_addr != ADMIN_IP:
         return False
     return True
 
