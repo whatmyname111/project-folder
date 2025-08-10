@@ -41,7 +41,7 @@ def validate_hwid(hwid):
     return bool(HWID_REGEX.match(hwid))
 
 def validate_ip(ip):
-    return bool(IP_REGEX.match(ip)
+    return bool(IP_REGEX.match(ip))
 
 def is_admin_request():
     key_from_header = request.headers.get("X-Admin-Key")
