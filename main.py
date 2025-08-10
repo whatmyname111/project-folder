@@ -80,7 +80,7 @@ def clean_old_keys():
             if delete.status_code == 204:
                 deleted += 1
 
-    return "🧹 Удалено ключей: {deleted}"
+    return f"🧹 Удалено ключей: {deleted}"
 @app.route('/api/get_key')
 @limiter.limit("10/minute")
 def get_key():
