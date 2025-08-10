@@ -10,23 +10,24 @@ from dotenv import load_dotenv
 from dateutil.parser import parse as parse_date
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address 
+
 # -------------- Load .env --------------
 load_dotenv("/etc/secrets/.env")
 
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 ADMIN_KEY = os.getenv("ADMIN_KEY")
-ADMIN_IP = os.getenv("ADMIN_IP") 
+ADMIN_IP = os.getenv("ADMIN_IP")  # Строго один IP для админки (можно оставить пустым для отключения)
 
+# -------------- Flask init --------------
+app = Flask(__name__)
 limiter = Limiter(get_remote_address, app=app, default_limits=["20 per minute"])
+
 SUPABASE_HEADERS = {
     'apikey': SUPABASE_KEY,
     'Authorization': f'Bearer {SUPABASE_KEY}',
     'Content-Type': 'application/json'
 }
-
-# -------------- Flask init --------------
-app = Flask(__name__)
 
 # -------------- Validation regexps --------------
 KEY_REGEX = re.compile(r"^Tw3ch1k_[0-9oasuxclO68901\-]{16,}$")
@@ -43,6 +44,7 @@ def validate_ip(ip):
     return bool(IP_REGEX.match(ip))
 
 def is_admin_request():
+    # Проверка ключа и IP (если задан)
     if request.headers.get("X-Admin-Key") != ADMIN_KEY:
         return False
     if ADMIN_IP and request.remote_addr != ADMIN_IP:
@@ -62,7 +64,6 @@ def generate_key(length=16):
     return f"Tw3ch1k_" + '-'.join([key[i:i+4] for i in range(0, len(key), 4)])
 
 def save_key(key=None):
-@limiter.limit("50/minute")
     key = key or generate_key()
     created_at = datetime.utcnow().isoformat()
     data = {"key": key, "created_at": created_at, "used": False}
@@ -119,16 +120,16 @@ def clean_old_keys():
     return jsonify({"deleted": deleted})
 
 @app.route('/api/get_key')
+@limiter.limit("10/minute")
 def get_key():
-@limiter.limit("1/day")
     key = save_key()
     if not key:
         return jsonify({"error": "Failed to save key"}), 500
     return jsonify({"key": key})
 
 @app.route('/api/verify_key')
+@limiter.limit("20/minute")
 def verify_key():
-@limiter.limit("50/minute")
     key = request.args.get('key')
     if not key or not validate_key(key):
         return "invalid", 200, {'Content-Type': 'text/plain'}
@@ -165,8 +166,8 @@ def verify_key():
     return "error", 500, {'Content-Type': 'text/plain'}
 
 @app.route('/api/save_user', methods=['POST'])
+@limiter.limit("5/minute")
 def save_user():
-@limiter.limit("50/minute")
     data = request.json or {}
     ip = request.remote_addr or 'unknown_ip'
     if not validate_ip(ip):
@@ -288,7 +289,7 @@ def admin_panel():
     </script></head><body>
     <h1>🔑 Keys</h1>
     <h2>🧹 Очистка</h2>
-    <button onclick="del('/api/clean_old_keys', {admin: '""" + ADMIN_KEY + """'})">Удалить ключи старше 24ч</button>
+    <button onclick="del('/api/clean_old_keys', {days: 1})">Удалить ключи старше 24ч</button>
     <table><tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>"""
     for k in keys:
         html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td><td><button onclick=\"del('/api/delete_key', {{key: '{k['key']}'}})\">Delete</button></td></tr>"
