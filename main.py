@@ -41,13 +41,13 @@ def validate_hwid(hwid):
     return bool(HWID_REGEX.match(hwid))
 
 def validate_ip(ip):
-    return bool(IP_REGEX.match(ip))
+    return bool(IP_REGEX.match(ip)
 
 def is_admin_request():
-    # Проверка ключа и IP (если задан)
-    if request.headers.get("X-Admin-Key") != ADMIN_KEY:
-        return False
-    return True
+    key_from_header = request.headers.get("X-Admin-Key")
+    key_from_arg = request.args.get('d')
+    key = key_from_header or key_from_arg
+    return key == ADMIN_KEY
 
 # -------------- Helpers --------------
 
