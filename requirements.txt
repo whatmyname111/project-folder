@@ -5,3 +5,4 @@ flask-limiter
 python-dateutil
 quart
 aiohttp
+werkzeug<3.0,>=2.2.0
