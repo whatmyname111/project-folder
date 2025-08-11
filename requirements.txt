@@ -3,7 +3,3 @@ requests
 python-dotenv
 flask-limiter
 python-dateutil
-quart
-aiohttp
-quart-limiter
-hypercorn
