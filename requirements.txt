@@ -1,2 +1,10 @@
-pip install --upgrade pip
-pip install -r requirements.txt
+Flask
+requests
+python-dotenv
+python-dateutil
+flask-limiter
+flask-cors
+flask-wtf
+flask-talisman
+bleach
+flask-security-too
