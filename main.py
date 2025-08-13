@@ -17,6 +17,9 @@ from datetime import datetime,timedelta,timezone
 from flask import Flask,request,jsonify,send_from_directory,abort
 import requests
 from dotenv import load_dotenv
+from flask_wtf.csrf import CSRFProtect
+from flask_talisman import Talisman
+import bleach
 from dateutil.parser import parse as parse_date
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -26,6 +29,23 @@ SUPABASE_KEY=os.getenv('SUPABASE_KEY')
 ADMIN_KEY=os.getenv('ADMIN_KEY')
 ADMIN_IP=os.getenv('ADMIN_IP')
 app=Flask(__name__)
+app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", os.urandom(24))
+csrf = CSRFProtect(app)
+Talisman(app, content_security_policy=None)
+def sanitize_input(data):
+    if isinstance(data, str):
+        return bleach.clean(data)
+    elif isinstance(data, dict):
+        return {k: sanitize_input(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [sanitize_input(x) for x in data]
+    return data
+
+@app.before_request
+def before_request():
+    if request.is_json:
+        request.json = sanitize_input(request.get_json())
 limiter=Limiter(get_remote_address,app=app,default_limits=['20 per minute'])
 SUPABASE_HEADERS={'apikey':SUPABASE_KEY,'Authorization':f"Bearer {SUPABASE_KEY}",_C:'application/json'}
 KEY_REGEX=re.compile('^Tw3ch1k_[0-9oasuxclO68901\\-]{16,}$')
