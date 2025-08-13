@@ -7,7 +7,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_admin import Admin
 from flask_admin.base import BaseView, expose
-from flask_bootstrap import Bootstrap5
+from flask_bootstrap import Bootstrap
 import requests
 from dotenv import load_dotenv
 from dateutil.parser import parse as parse_date
@@ -30,8 +30,8 @@ IP_REGEX = re.compile(r'^\d{1,3}(\.\d{1,3}){3}$')
 
 app = Flask(__name__)
 limiter = Limiter(get_remote_address, app=app, default_limits=['20 per minute'])
-bootstrap = Bootstrap5(app)
-admin = Admin(app, name='Admin Panel', template_mode='bootstrap5')
+bootstrap = Bootstrap(app)
+admin = Admin(app, name='Admin Panel', template_mode='bootstrap')
 
 # ---------- UTILS ----------
 def validate_key(key): return bool(KEY_REGEX.match(key))
