@@ -84,7 +84,7 @@ def check_referrer():
 @app.before_request
 def block_invalid_referrer():
     # проверяем только обычные маршруты, можно исключить админку
-    if request.endpoint not in ['loot-link.com]:
+    if request.endpoint not in ['admin_panel']:
         if not check_referrer():
             html = f"""
             <html>
