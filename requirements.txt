@@ -3,3 +3,5 @@ requests
 python-dotenv
 flask-limiter
 python-dateutil
+Flask-Admin
+Flask-Bootstrap
