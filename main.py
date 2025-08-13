@@ -29,8 +29,9 @@ SUPABASE_KEY=os.getenv('SUPABASE_KEY')
 ADMIN_KEY=os.getenv('ADMIN_KEY')
 ADMIN_IP=os.getenv('ADMIN_IP')
 app=Flask(__name__)
-app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", os.urandom(24))
+app.secret_key = os.getenv("SECRET_KEY")
+if not app.secret_key:
+    raise RuntimeError("SECRET_KEY is not set in environment")
 csrf = CSRFProtect(app)
 Talisman(app, content_security_policy=None)
 def sanitize_input(data):
@@ -41,7 +42,6 @@ def sanitize_input(data):
     elif isinstance(data, list):
         return [sanitize_input(x) for x in data]
     return data
-
 @app.before_request
 def before_request():
     if request.is_json:
