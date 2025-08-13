@@ -3,7 +3,10 @@ requests
 python-dotenv
 flask-limiter
 python-dateutil
-Flask-Admin
-Flask-Bootstrap
+flask-admin
+flask-bootstrap
 sqlalchemy
 flask-sqlalchemy
+flask-security-too
+flask-migrate
+psycopg2-binary
