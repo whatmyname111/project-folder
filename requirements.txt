@@ -5,3 +5,5 @@ flask-limiter
 python-dateutil
 Flask-Admin
 Flask-Bootstrap
+sqlalchemy
+flask-sqlalchemy
