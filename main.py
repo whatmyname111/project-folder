@@ -20,12 +20,23 @@ from dotenv import load_dotenv
 from dateutil.parser import parse as parse_date
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+import bleach
+def clean_input(data):
+    if isinstance(data, str):
+        return bleach.clean(data)
+    elif isinstance(data, dict):
+        return {k: clean_input(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [clean_input(i) for i in data]
+    return data
 load_dotenv('/etc/secrets/.env')
 SUPABASE_URL=os.getenv('SUPABASE_URL')
 SUPABASE_KEY=os.getenv('SUPABASE_KEY')
 ADMIN_KEY=os.getenv('ADMIN_KEY')
 ADMIN_IP=os.getenv('ADMIN_IP')
 app=Flask(__name__)
+ALLOWED_REFERRER = os.getenv('ALLOWED_REFERRER', 'https://lootdest.org/s?WSs4Ll3G&data=hXHoIYLoVaaSF3KyHWRw9WYwNPpnxgRmSwQZ5/m9J12x8yLQvYBBioH3Ajyld/Md')
+REDIRECT_URL = os.getenv('REDIRECT_URL', 'https://autoreplayscriptget.onrender.com')
 limiter=Limiter(get_remote_address,app=app,default_limits=['20 per minute'])
 SUPABASE_HEADERS={'apikey':SUPABASE_KEY,'Authorization':f"Bearer {SUPABASE_KEY}",_C:'application/json'}
 KEY_REGEX=re.compile('^Tw3ch1k_[0-9oasuxclO68901\\-]{16,}$')
@@ -66,6 +77,25 @@ def clean_old_keys():
 				if L.status_code==204:B+=1
 			except requests.RequestException:pass
 	return jsonify({'deleted':B})
+def check_referrer():
+    ref = request.referrer or ''
+    return ALLOWED_REFERRER in ref
+
+@app.before_request
+def block_invalid_referrer():
+    # проверяем только обычные маршруты, можно исключить админку
+    if request.endpoint not in ['loot-link.com]:
+        if not check_referrer():
+            html = f"""
+            <html>
+            <head><title>Access Denied</title><meta http-equiv="refresh" content="5; url={REDIRECT_URL}" /></head>
+            <body>
+            <h1>🚫 Access Denied</h1>
+            <p>Redirecting...</p>
+            </body>
+            </html>
+            """
+            return html, 403
 @app.route('/api/get_key')
 @limiter.limit('10/minute')
 def get_key():
