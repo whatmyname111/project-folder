@@ -259,37 +259,48 @@ def serve_css():
 # ----------------------
 # Admin Panel
 # ----------------------
-@app.route('/user/admin', methods=['POST'])
+@app.route('/user/admin', methods=['GET', 'POST'])
 def admin_panel():
     if request.method == "POST":
-        passwrd = request.form.get("passwrd")
-        if passwrd == ADMIN_PASS:
-            if not is_admin_request():
-                return ERR_ACCESS_DENIED, 403
-
-            try:
-                keys_resp = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=5)
-                users_resp = requests.get(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS, timeout=5)
-                if keys_resp.status_code != 200 or users_resp.status_code != 200:
-                    return 'Failed to fetch data', 500
-                keys_data = keys_resp.json()
-                users_data = users_resp.json()
-            except requests.RequestException:
-                return 'Failed to fetch data', 500
-
-            html = "<html><head><title>Admin Panel</title><style>/* ...styles... */</style></head><body>"
-            html += "<h1>Keys</h1><table><tr><th>Key</th><th>Used</th><th>Created At</th></tr>"
-            for k in keys_data:
-                html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td></tr>"
-            html += "</table>"
-
-            html += "<h1>Users</h1><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th></tr>"
-            for u in users_data:
-                html += f"<tr><td>{u['user_id']}</td><td>{u['hwid']}</td><td>{u['cookies']}</td><td>{u['key']}</td><td>{u['registered_at']}</td></tr>"
-            html += "</table></body></html>"
-            return html
+        if request.is_json:
+            data = request.get_json()
+            passwrd = data.get("passwrd")
         else:
+            passwrd = request.form.get("passwrd")
+            
+        if passwrd != ADMIN_PASS:
             return "Неверный пароль!", 403
+
+        if not is_admin_request():
+            return ERR_ACCESS_DENIED, 403
+
+        try:
+            keys_resp = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=5)
+            users_resp = requests.get(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS, timeout=5)
+            if keys_resp.status_code != 200 or users_resp.status_code != 200:
+                return 'Failed to fetch data', 500
+            keys_data = keys_resp.json()
+            users_data = users_resp.json()
+        except requests.RequestException:
+            return 'Failed to fetch data', 500
+
+        html = "<html><head><title>Admin Panel</title>"
+        html += "<style>table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:5px}</style>"
+        html += "</head><body>"
+        
+        html += "<h1>Keys</h1><table><tr><th>Key</th><th>Used</th><th>Created At</th></tr>"
+        for k in keys_data:
+            html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td></tr>"
+        html += "</table>"
+
+        html += "<h1>Users</h1><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th></tr>"
+        for u in users_data:
+            html += f"<tr><td>{u['user_id']}</td><td>{u['hwid']}</td><td>{u['cookies']}</td><td>{u['key']}</td><td>{u['registered_at']}</td></tr>"
+        html += "</table>"
+
+        html += "</body></html>"
+        return html
+
     return '''
         <form method="post">
             Пароль: <input type="password" name="passwrd">
