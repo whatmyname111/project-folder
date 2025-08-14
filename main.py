@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import requests
 from dotenv import load_dotenv
 from dateutil.parser import parse as parse_date
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_cors import CORS
@@ -42,6 +42,7 @@ ERR_SAVE_KEY = 'Failed to save key'
 
 # Flask app
 app = Flask(__name__)
+app.secret_key = os.dotenv("Sss-key")
 CORS(app, resources={r"/api/*": {"origins": ["https://www.roblox.com", "https://*.robloxlabs.com"]}})
 limiter = Limiter(get_remote_address, app=app, default_limits=['20 per minute'])
 
@@ -270,13 +271,8 @@ def admin_panel():
             passwrd = request.form.get("passwrd")
 
         # Проверка пароля
-        if passwrd != ADMIN_PASS:
-            return "Неверный пароль!", 403
-
-        # Проверка admin key (X-Admin-Key header или ?d=)
-        if not is_admin_request():
+        if passwrd != ADMIN_PASS and if not is_admin_request():
             return ERR_ACCESS_DENIED, 403
-
         # Получаем данные из Supabase
         try:
             keys_resp = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=5)
