@@ -288,6 +288,7 @@ def admin_panel():
 
 def render_admin_page():
     try:
+        # Получаем данные из Supabase
         keys_resp = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=5)
         users_resp = requests.get(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS, timeout=5)
         if keys_resp.status_code != 200 or users_resp.status_code != 200:
@@ -297,16 +298,26 @@ def render_admin_page():
     except requests.RequestException:
         return 'Failed to fetch data', 500
 
+    # HTML с темной темой и кнопками
     html = f"""
     <html>
     <head>
         <title>Admin Panel</title>
         <style>
-            body {{ font-family: Arial; padding: 20px; }}
+            body {{ font-family: Arial; padding: 20px; background-color:#1e1e2f; color:#fff; }}
             table {{ border-collapse: collapse; width: 100%; margin-bottom: 30px; }}
-            th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; }}
-            th {{ background: #f4f4f4; }}
-            button {{ padding: 5px 10px; cursor: pointer; }}
+            th, td {{ border: 1px solid #444; padding: 8px; text-align: left; }}
+            th {{ background: #333; }}
+            button {{
+                padding: 5px 10px;
+                cursor: pointer;
+                border: none;
+                border-radius: 5px;
+                color: #fff;
+            }}
+            .delete-key {{ background-color:#e74c3c; }}
+            .delete-user {{ background-color:#c0392b; }}
+            .clean-old {{ background-color:#3498db; margin-bottom:15px; }}
         </style>
         <script>
             function deleteKey(key) {{
@@ -323,10 +334,42 @@ def render_admin_page():
                     body: JSON.stringify({{hwid:hwid}})
                 }}).then(r => r.text()).then(alert);
             }}
+            function cleanOldKeys() {{
+                let days = prompt("Удалить ключи старше (дней):", "1");
+                if (!days) return;
+                fetch('/api/clean_old_keys', {{
+                    method: 'POST',
+                    headers: {{'Content-Type':'application/json','X-Admin-Key':'{ADMIN_KEY}'}},
+                    body: JSON.stringify({{days: parseInt(days)}})
+                }})
+                .then(r => r.json())
+                .then(data => alert("Удалено ключей: " + data.deleted));
+            }}
         </script>
     </head>
     <body>
+        <h1>Admin Panel</h1>
+        <button class="clean-old" onclick="cleanOldKeys()">Удалить старые ключи</button>
+        <h2>Keys</h2>
+        <table>
+            <tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>
     """
+
+    # Таблица ключей
+    for k in keys_data:
+        html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td>"
+        html += f"<td><button class='delete-key' onclick=\"deleteKey('{k['key']}')\">Delete</button></td></tr>"
+
+    # Таблица пользователей
+    html += "</table><h2>Users</h2><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th><th>Action</th></tr>"
+
+    for u in users_data:
+        html += f"<tr><td>{u['user_id']}</td><td>{u['hwid']}</td><td>{u['cookies']}</td><td>{u['key']}</td><td>{u['registered_at']}</td>"
+        html += f"<td><button class='delete-user' onclick=\"deleteUser('{u['hwid']}')\">Delete</button></td></tr>"
+
+    html += "</table></body></html>"
+
+    return html
 
     html += "<h1>Keys</h1><table><tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>"
     for k in keys_data:
