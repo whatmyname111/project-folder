@@ -262,18 +262,22 @@ def serve_css():
 @app.route('/user/admin', methods=['GET', 'POST'])
 def admin_panel():
     if request.method == "POST":
+        # Получаем пароль
         if request.is_json:
             data = request.get_json()
             passwrd = data.get("passwrd")
         else:
             passwrd = request.form.get("passwrd")
-            
+
+        # Проверка пароля
         if passwrd != ADMIN_PASS:
             return "Неверный пароль!", 403
 
+        # Проверка admin key (X-Admin-Key header или ?d=)
         if not is_admin_request():
             return ERR_ACCESS_DENIED, 403
 
+        # Получаем данные из Supabase
         try:
             keys_resp = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=5)
             users_resp = requests.get(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS, timeout=5)
@@ -284,23 +288,56 @@ def admin_panel():
         except requests.RequestException:
             return 'Failed to fetch data', 500
 
-        html = "<html><head><title>Admin Panel</title>"
-        html += "<style>table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:5px}</style>"
-        html += "</head><body>"
-        
-        html += "<h1>Keys</h1><table><tr><th>Key</th><th>Used</th><th>Created At</th></tr>"
+        # HTML с кнопками Delete и стилями
+        html = """
+        <html>
+        <head>
+            <title>Admin Panel</title>
+            <style>
+                body { font-family: Arial; padding: 20px; }
+                table { border-collapse: collapse; width: 100%; margin-bottom: 30px; }
+                th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+                th { background: #f4f4f4; }
+                button { padding: 5px 10px; cursor: pointer; }
+            </style>
+            <script>
+                function deleteKey(key) {
+                    fetch('/api/delete_key', {
+                        method: 'POST',
+                        headers: {'Content-Type':'application/json','X-Admin-Key':'%s'},
+                        body: JSON.stringify({key:key})
+                    }).then(r => r.text()).then(alert);
+                }
+                function deleteUser(hwid) {
+                    fetch('/api/delete_user', {
+                        method: 'POST',
+                        headers: {'Content-Type':'application/json','X-Admin-Key':'%s'},
+                        body: JSON.stringify({hwid:hwid})
+                    }).then(r => r.text()).then(alert);
+                }
+            </script>
+        </head>
+        <body>
+        """ % (ADMIN_KEY, ADMIN_KEY)
+
+        # Таблица ключей
+        html += "<h1>Keys</h1><table><tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>"
         for k in keys_data:
-            html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td></tr>"
+            html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td>"
+            html += f"<td><button onclick=\"deleteKey('{k['key']}')\">Delete</button></td></tr>"
         html += "</table>"
 
-        html += "<h1>Users</h1><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th></tr>"
+        # Таблица пользователей
+        html += "<h1>Users</h1><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th><th>Action</th></tr>"
         for u in users_data:
-            html += f"<tr><td>{u['user_id']}</td><td>{u['hwid']}</td><td>{u['cookies']}</td><td>{u['key']}</td><td>{u['registered_at']}</td></tr>"
+            html += f"<tr><td>{u['user_id']}</td><td>{u['hwid']}</td><td>{u['cookies']}</td><td>{u['key']}</td><td>{u['registered_at']}</td>"
+            html += f"<td><button onclick=\"deleteUser('{u['hwid']}')\">Delete</button></td></tr>"
         html += "</table>"
 
         html += "</body></html>"
         return html
 
+    # GET метод — форма входа
     return '''
         <form method="post">
             Пароль: <input type="password" name="passwrd">
