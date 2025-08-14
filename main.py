@@ -42,7 +42,7 @@ ERR_SAVE_KEY = 'Failed to save key'
 
 # Flask app
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": ["https://www.roblox.com", "https://*.robloxlabs.com"]})
+CORS(app, resources={r"/api/*": {"origins": ["https://www.roblox.com", "https://*.robloxlabs.com"]}})
 limiter = Limiter(get_remote_address, app=app, default_limits=['20 per minute'])
 
 # ----------------------
