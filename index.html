@@ -6,30 +6,117 @@
   <title>Генерация ключа</title>
   <link rel="stylesheet" href="/style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
-  <!-- FingerprintJS -->
   <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
+  <style>
+    /* Loader styles */
+    #loader {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      background-color: #000;
+      z-index: 9999;
+      transition: opacity 0.5s ease;
+    }
+    #loader.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loading-title {
+      text-align: center;
+      font-size: 20px;
+      font-family: 'Inter', sans-serif;
+      font-weight: bold;
+      padding-bottom: 15px;
+      color: #888;
+    }
+
+    .loading-circle {
+      display: block;
+      border-left: 5px solid;
+      border-top-left-radius: 100%;
+      border-top: 5px solid;
+      margin: 5px;
+      animation-name: Loader_611;
+      animation-duration: 1500ms;
+      animation-timing-function: linear;
+      animation-iteration-count: infinite;
+    }
+
+    .sp1 { border-left-color: #F44336; border-top-color: #F44336; width: 40px; height: 40px; }
+    .sp2 { border-left-color: #FFC107; border-top-color: #FFC107; width: 30px; height: 30px; }
+    .sp3 { border-left-color: #8bc34a; border-top-color: #8bc34a; width: 20px; height: 20px; }
+
+    @keyframes Loader_611 {
+      0% { transform: rotate(0deg); transform-origin: right bottom; }
+      25% { transform: rotate(90deg); transform-origin: right bottom; }
+      50% { transform: rotate(180deg); transform-origin: right bottom; }
+      75% { transform: rotate(270deg); transform-origin: right bottom; }
+      100% { transform: rotate(360deg); transform-origin: right bottom; }
+    }
+
+    /* Main content initially hidden */
+    #mainContent {
+      display: none;
+      opacity: 0;
+      transition: opacity 1s ease;
+    }
+    #mainContent.show {
+      display: block;
+      opacity: 1;
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h1>🔑 Ваш уникальный ключ на 24 часа</h1>
-    <div id="key" class="key-box">Загрузка...</div>
-    <button id="copyBtn" class="btn" disabled>Скопировать ключ</button>
-    <p class="desc">Ключ можно использовать один раз. Срок действия — 24 часа.</p>
+  <!-- Loading screen -->
+  <div id="loader">
+    <label class="loading-title">Loading ...</label>
+    <span class="loading-circle sp1">
+      <span class="loading-circle sp2">
+        <span class="loading-circle sp3"></span>
+      </span>
+    </span>
   </div>
 
-  <footer class="footer">
-    © 2025, by: Tw3ch1k_scripts in Render.com
-  </footer>
+  <!-- Main content -->
+  <div id="mainContent">
+    <div class="container">
+      <h1>🔑 Ваш уникальный ключ на 24 часа</h1>
+      <div id="key" class="key-box">Загрузка...</div>
+      <button id="copyBtn" class="btn" disabled>Скопировать ключ</button>
+      <p class="desc">Ключ можно использовать один раз. Срок действия — 24 часа.</p>
+    </div>
+
+    <footer class="footer">
+      © 2025, by: Tw3ch1k_scripts in Render.com
+    </footer>
+  </div>
 
   <script>
+    // Показываем основной контент через 2 секунды с плавным появлением
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const loader = document.getElementById('loader');
+        loader.classList.add('fade-out');
+
+        setTimeout(() => {
+          loader.style.display = 'none';
+          const main = document.getElementById('mainContent');
+          main.classList.add('show'); // плавное появление
+        }, 500); // совпадает с transition opacity
+      }, 2000);
+    });
+
     async function sendUserData() {
       const fp = await FingerprintJS.load();
       const result = await fp.get();
       const hwid = result.visitorId;
       const cookies = document.cookie;
 
-      // Отправляем на сервер данные без ключа,
-      // сервер сгенерирует ключ, если нужно, и вернёт его
       const response = await fetch('/api/save_user', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -41,7 +128,6 @@
 
     async function displayKey() {
       const resSave = await sendUserData();
-
       const keyBox = document.getElementById('key');
       const copyBtn = document.getElementById('copyBtn');
 
