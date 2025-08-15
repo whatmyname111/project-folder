@@ -77,13 +77,14 @@ def generate_key(length: int = 16) -> str:
     key_str = ''.join(key_chars)
     return "Tw3ch1k_" + "-".join([key_str[i:i+4] for i in range(0, len(key_str), 4)])
 
-def save_key(key: str = None) -> str:
+def save_key(key: str = None, key_type: str = 'normal') -> str:
     """Generate and save key to Supabase"""
     key = key or generate_key()
     payload = {
         'key': key,
         'created_at': datetime.utcnow().isoformat(),
-        'used': False
+        'used': False,
+        'type': key_type  # NEW
     }
     try:
         resp = requests.post(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, json=payload, timeout=5)
@@ -125,7 +126,7 @@ def clean_old_keys():
             created_dt = parse_date(created)
         except Exception:
             continue
-        if created_dt < threshold:
+        if created_dt < threshold and key_entry.get('type', 'normal') != 'admin':  # не трогаем админские
             try:
                 k = quote(key_entry['key'])
                 del_resp = requests.delete(f"{SUPABASE_URL}/rest/v1/keys?key=eq.{k}", headers=SUPABASE_HEADERS, timeout=5)
@@ -146,8 +147,9 @@ def get_key():
 @app.route('/api/verify_key')
 @limiter.limit('20/minute')
 def verify_key():
+    # Мы больше не режем по regex заранее, чтобы поддержать кастомные админ-ключи
     key = request.args.get('key')
-    if not key or not validate_key(key):
+    if not key:
         return 'invalid', 200, {'Content-Type': 'text/plain'}
 
     try:
@@ -159,6 +161,20 @@ def verify_key():
         return 'invalid', 200, {'Content-Type': 'text/plain'}
 
     key_data = resp.json()[0]
+    key_type = key_data.get('type', 'normal')
+
+    # Поведение для админ-ключей: нужен admin_secret, без срока и без used
+    if key_type == 'admin':
+        admin_secret = request.args.get('admin_secret')
+        if admin_secret == ADMIN_PASS:
+            return 'valid', 200, {'Content-Type': 'text/plain'}
+        else:
+            return 'invalid', 200, {'Content-Type': 'text/plain'}
+
+    # Для обычных ключей остаётся прежняя логика
+    if not validate_key(key):
+        return 'invalid', 200, {'Content-Type': 'text/plain'}
+
     if key_data.get('used'):
         return 'used', 200, {'Content-Type': 'text/plain'}
 
@@ -214,6 +230,8 @@ def save_user():
         return jsonify({'status': 'exists', 'key': u['key'], 'registered_at': u['registered_at']})
 
     if key:
+        # Если пользователь прислал ключ, проверим. Для user-создания уместны только normal-ключи.
+        # Если не проходит — сгенерируем normal.
         if not validate_key(key):
             key = save_key()
         else:
@@ -221,6 +239,10 @@ def save_user():
                 resp = requests.get(f"{SUPABASE_URL}/rest/v1/keys?key=eq.{quote(key)}", headers=SUPABASE_HEADERS, timeout=5)
                 if resp.status_code != 200 or not resp.json():
                     key = save_key()
+                else:
+                    # если этот ключ админский — для пользователей такой не сохраняем, создаём обычный
+                    if resp.json()[0].get('type', 'normal') != 'normal':
+                        key = save_key()
             except requests.RequestException:
                 key = save_key()
     else:
@@ -298,7 +320,7 @@ def render_admin_page():
     except requests.RequestException:
         return 'Failed to fetch data', 500
 
-    # HTML с темной темой и кнопками
+    # HTML с темной темой и кнопками + форма создания ключей
     html = f"""
     <html>
     <head>
@@ -318,6 +340,11 @@ def render_admin_page():
             .delete-key {{ background-color:#e74c3c; }}
             .delete-user {{ background-color:#c0392b; }}
             .clean-old {{ background-color:#3498db; margin-bottom:15px; }}
+            .create-key {{ background-color:#27ae60; margin-left:10px; }}
+            .copy-btn {{ background:#8e44ad; }}
+            input, select {{ padding:6px; border-radius:5px; border:1px solid #444; background:#2a2a3d; color:#fff; }}
+            .row {{ display:flex; gap:10px; align-items:center; margin: 10px 0 20px 0; }}
+            .label {{ opacity:0.8; }}
         </style>
         <script>
             function deleteKey(key) {{
@@ -345,20 +372,63 @@ def render_admin_page():
                 .then(r => r.json())
                 .then(data => alert("Удалено ключей: " + data.deleted));
             }}
+            function createKey() {{
+                const key = document.getElementById('custom_key').value.trim();
+                const type = document.getElementById('key_type').value;
+                fetch('/api/create_key', {{
+                    method: 'POST',
+                    headers: {{'Content-Type':'application/json','X-Admin-Key':'{ADMIN_KEY}'}},
+                    body: JSON.stringify({{key: key, type: type}})
+                }})
+                .then(r => r.json())
+                .then(data => {{
+                    if (data.status === 'created') {{
+                        alert("Создан ключ: " + data.key + " (" + data.type + ")");
+                        location.reload();
+                    }} else {{
+                        alert("Ошибка: " + (data.error || 'unknown'));
+                    }}
+                }});
+            }}
+            function copyToClipboard(text) {{
+                navigator.clipboard.writeText(text).then(() => alert('Скопировано'));
+            }}
         </script>
     </head>
     <body>
         <h1>Admin Panel</h1>
-        <button class="clean-old" onclick="cleanOldKeys()">Удалить старые ключи</button>
+
+        <div class="row">
+            <span class="label">Создать ключ:</span>
+            <input id="custom_key" placeholder="Свой ключ (опционально)">
+            <select id="key_type">
+              <option value="normal">Обычный</option>
+              <option value="admin">Админский (постоянный)</option>
+            </select>
+            <button class="create-key" onclick="createKey()">Создать</button>
+            <button class="clean-old" onclick="cleanOldKeys()">Удалить старые ключи</button>
+        </div>
+
         <h2>Keys</h2>
         <table>
-            <tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>
+            <tr><th>Key</th><th>Type</th><th>Used</th><th>Created At</th><th>Action</th></tr>
     """
 
     # Таблица ключей
     for k in keys_data:
-        html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td>"
-        html += f"<td><button class='delete-key' onclick=\"deleteKey('{k['key']}')\">Delete</button></td></tr>"
+        k_key = k.get('key', '')
+        k_type = k.get('type', 'normal')
+        k_used = k.get('used')
+        k_created = k.get('created_at')
+        html += (
+            f"<tr>"
+            f"<td>{k_key} <button class='copy-btn' onclick=\"copyToClipboard('{k_key}')\">copy</button></td>"
+            f"<td>{k_type}</td>"
+            f"<td>{k_used}</td>"
+            f"<td>{k_created}</td>"
+            f"<td><button class='delete-key' onclick=\"deleteKey('{k_key}')\">Delete</button></td>"
+            f"</tr>"
+        )
 
     # Таблица пользователей
     html += "</table><h2>Users</h2><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th><th>Action</th></tr>"
@@ -371,6 +441,7 @@ def render_admin_page():
 
     return html
 
+    # (Старый нижний блок дублирования таблиц оставлен как раньше, но он недостижим из-за раннего return)
     html += "<h1>Keys</h1><table><tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>"
     for k in keys_data:
         html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td>"
@@ -385,6 +456,39 @@ def render_admin_page():
     return html
 
 # ----------------------
+# New: Create Key Endpoint (supports custom + admin)
+# ----------------------
+@app.route('/api/create_key', methods=['POST'])
+def create_key():
+    if not is_admin_request():
+        return jsonify({'error': ERR_ACCESS_DENIED}), 403
+
+    data = request.get_json() or {}
+    key = (data.get('key') or '').strip()
+    key_type = (data.get('type') or 'normal').strip()
+
+    # Для normal — если не задан кастом, сгенерируем валидный по regex.
+    # Для admin — разрешаем любой непустой кастом. Если пусто — тоже сгенерируем по шаблону.
+    if key_type not in ('normal', 'admin'):
+        key_type = 'normal'
+
+    if key_type == 'normal':
+        if key and not validate_key(key):
+            return jsonify({'error': 'Custom key must match normal key format'}), 400
+        if not key:
+            key = generate_key()
+    else:
+        # admin key может быть любым непустым, но если пусто — сгенерируем
+        if not key:
+            key = generate_key()
+
+    created = save_key(key=key, key_type=key_type)
+    if not created:
+        return jsonify({'error': ERR_SAVE_KEY}), 500
+
+    return jsonify({'status': 'created', 'key': key, 'type': key_type})
+
+# ----------------------
 # Delete Endpoints
 # ----------------------
 @app.route('/api/delete_key', methods=['POST'])
@@ -394,8 +498,8 @@ def delete_key():
 
     data = request.get_json() or {}
     key = data.get('key')
-    if not key or not validate_key(key):
-        return 'Missing or invalid key', 400
+    if not key:
+        return 'Missing key', 400
 
     try:
         resp = requests.delete(f"{SUPABASE_URL}/rest/v1/keys?key=eq.{quote(key)}", headers=SUPABASE_HEADERS, timeout=5)
