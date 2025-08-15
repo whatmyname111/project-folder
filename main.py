@@ -42,8 +42,8 @@ ERR_SAVE_KEY = 'Failed to save key'
 
 # Flask app
 app = Flask(__name__)
-app.secret_key = os.getenv("ADMIN_SESSION_KEY", "super-secret-key")  # секрет для сессий
-app.config['SESSION_COOKIE_NAME'] = 'admin_session'
+app.secret_key = os.getenv("ADMIN_SESSION_KEY")  # секрет для сессий
+app.config['SESSION_COOKIE_NAME'] = os.dotenv("sskk")
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 CORS(app, resources={r"/api/*": {"origins": ["https://www.roblox.com", "https://*.robloxlabs.com"]}})
 limiter = Limiter(get_remote_address, app=app, default_limits=['20 per minute'])
@@ -147,11 +147,11 @@ def get_key():
 @limiter.limit('20/minute')
 def verify_key():
     key = request.args.get('key')
-    if not key or not validate_key(key):
-        return 'invalid', 200, {'Content-Type': 'text/plain'}
     if key == "Admin":
         return "valid", 200, {'Content-Type': 'text/plain'}
-    
+        
+    if not key or not validate_key(key):
+        return 'invalid', 200, {'Content-Type': 'text/plain'}    
     try:
         resp = requests.get(f"{SUPABASE_URL}/rest/v1/keys?key=eq.{quote(key)}", headers=SUPABASE_HEADERS, timeout=5)
     except requests.RequestException:
