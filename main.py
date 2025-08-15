@@ -149,7 +149,7 @@ def verify_key():
     key = request.args.get('key')
     if not key or not validate_key(key):
         return 'invalid', 200, {'Content-Type': 'text/plain'}
-    if key == "Admin"
+    if key == "Admin":
         return "valid", 200, {'Content-Type': 'text/plain'}
     
     try:
