@@ -84,7 +84,7 @@ def save_key(key: str = None, key_type: str = 'normal') -> str:
         'key': key,
         'created_at': datetime.utcnow().isoformat(),
         'used': False,
-        'type': key_type  # NEW
+        'type': key_type
     }
     try:
         resp = requests.post(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, json=payload, timeout=5)
@@ -147,7 +147,6 @@ def get_key():
 @app.route('/api/verify_key')
 @limiter.limit('20/minute')
 def verify_key():
-    # Мы больше не режем по regex заранее, чтобы поддержать кастомные админ-ключи
     key = request.args.get('key')
     if not key:
         return 'invalid', 200, {'Content-Type': 'text/plain'}
@@ -439,20 +438,6 @@ def render_admin_page():
 
     html += "</table></body></html>"
 
-    return html
-
-    # (Старый нижний блок дублирования таблиц оставлен как раньше, но он недостижим из-за раннего return)
-    html += "<h1>Keys</h1><table><tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>"
-    for k in keys_data:
-        html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td>"
-        html += f"<td><button onclick=\"deleteKey('{k['key']}')\">Delete</button></td></tr>"
-    html += "</table>"
-
-    html += "<h1>Users</h1><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th><th>Action</th></tr>"
-    for u in users_data:
-        html += f"<tr><td>{u['user_id']}</td><td>{u['hwid']}</td><td>{u['cookies']}</td><td>{u['key']}</td><td>{u['registered_at']}</td>"
-        html += f"<td><button onclick=\"deleteUser('{u['hwid']}')\">Delete</button></td></tr>"
-    html += "</table></body></html>"
     return html
 
 # ----------------------
