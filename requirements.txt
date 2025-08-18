@@ -1,9 +1,8 @@
-flask
-requests
-flask-cors
-flask-limiter
+httpx 
+cryptography 
+python-dateutil 
+uvicorn flask 
+flask-limiter 
+flask-cors 
 python-dotenv
-httpx
-pycryptodome
-python-dateutil
-cryptography
+flask
