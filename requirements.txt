@@ -1,4 +1,3 @@
-httpx 
 cryptography 
 python-dateutil 
 uvicorn 
@@ -6,3 +5,4 @@ flask-limiter
 flask-cors 
 python-dotenv
 flask
+requests
