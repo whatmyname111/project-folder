@@ -16,7 +16,7 @@ import hashlib
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
-
+load_dotenv('/etc/secrets/.env')
 ENCRYPTION_SECRET = os.getenv("ENCRYPTION_SECRET").encode()
 salt = hashlib.sha256(ENCRYPTION_SECRET).digest()
 kdf = PBKDF2HMAC(
@@ -31,8 +31,6 @@ cipher_suite = Fernet(key)
 # ----------------------
 # Constants / Config
 # ----------------------
-load_dotenv('/etc/secrets/.env')
-
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 ADMIN_KEY = os.getenv('ADMIN_KEY')
