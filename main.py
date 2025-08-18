@@ -12,13 +12,12 @@ from flask import Flask, request, jsonify, send_from_directory, session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_cors import CORS
-from cryptography import PBKDF2HMAC, Fernet, hashes
 import hashlib
-# ----------------------
-# Constants / Config
-# ----------------------
-load_dotenv('/etc/secrets/.env')
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
 
+ENCRYPTION_SECRET = os.getenv("ENCRYPTION_SECRET").encode()
 salt = hashlib.sha256(ENCRYPTION_SECRET).digest()
 kdf = PBKDF2HMAC(
     algorithm=hashes.SHA256(),
@@ -28,6 +27,11 @@ kdf = PBKDF2HMAC(
 )
 key = base64.urlsafe_b64encode(kdf.derive(ENCRYPTION_SECRET))
 cipher_suite = Fernet(key)
+
+# ----------------------
+# Constants / Config
+# ----------------------
+load_dotenv('/etc/secrets/.env')
 
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
