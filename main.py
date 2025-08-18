@@ -68,16 +68,13 @@ def validate_key(key: str) -> bool:
     return bool(KEY_REGEX.match(key))
     
 def encrypt_data(data: str) -> str:
-    """Encrypt data using Fernet"""
     return cipher_suite.encrypt(data.encode()).decode()
 
 def decrypt_data(encrypted_data: str) -> str:
-    """Decrypt data using Fernet"""
     return cipher_suite.decrypt(encrypted_data.encode()).decode()
 
-def get_user_id(ip: str, hwid: str) -> str:
-    """Generate encrypted user ID"""
-    raw_id = f"{ip}_{hwid}"
+def get_user_id(hwid: str) -> str:
+    raw_id = f"{hwid}"
     return encrypt_data(raw_id)
     
 def validate_hwid(hwid: str) -> bool:
@@ -119,9 +116,6 @@ def save_key(key: str = None) -> str:
         pass
     return None
 
-# ----------------------
-# API Routes
-# ----------------------
 @app.route('/api/clean_old_keys', methods=['POST'])
 def clean_old_keys():
     if not is_admin_request():
@@ -287,7 +281,7 @@ def serve_css():
 # ----------------------
 @app.route('/user/admin', methods=['GET', 'POST'])
 def admin_panel():
-    session.permanent = True  # включаем постоянную сессию
+    session.permanent = True
     if session.get('admin_xd'):
         return render_admin_page()
 
@@ -313,7 +307,6 @@ def admin_panel():
 
 def render_admin_page():
     try:
-        # Получаем данные из Supabase
         keys_resp = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=5)
         users_resp = requests.get(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS, timeout=5)
         if keys_resp.status_code != 200 or users_resp.status_code != 200:
@@ -322,8 +315,6 @@ def render_admin_page():
         users_data = users_resp.json()
     except requests.RequestException:
         return 'Failed to fetch data', 500
-
-    # HTML с темной темой и кнопками
     html = f"""
     <html>
     <head>
@@ -379,19 +370,14 @@ def render_admin_page():
         <table>
             <tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>
     """
-
-    # Таблица ключей
     for k in keys_data:
         html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td>"
         html += f"<td><button class='delete-key' onclick=\"deleteKey('{k['key']}')\">Delete</button></td></tr>"
-
-    # Таблица пользователей
     html += "</table><h2>Users</h2><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th><th>Action</th></tr>"
 
     for u in users_data:
         html += f"<tr><td>{u['user_id']}</td><td>{u['hwid']}</td><td>{u['cookies']}</td><td>{u['key']}</td><td>{u['registered_at']}</td>"
         html += f"<td><button class='delete-user' onclick=\"deleteUser('{u['hwid']}')\">Delete</button></td></tr>"
-
     html += "</table></body></html>"
 
     return html
