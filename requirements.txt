@@ -1,7 +1,7 @@
 httpx 
 cryptography 
 python-dateutil 
-uvicorn flask 
+uvicorn 
 flask-limiter 
 flask-cors 
 python-dotenv
