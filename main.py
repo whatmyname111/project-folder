@@ -1,6 +1,7 @@
 import os
 import random
 import re
+import logging
 from urllib.parse import quote
 from datetime import datetime, timedelta, timezone
 import asyncio
@@ -47,7 +48,7 @@ app = Flask(__name__)
 app.secret_key = os.getenv("ADMIN_SESSION_KEY")
 app.config['SESSION_COOKIE_NAME'] = os.getenv("sskk")
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
-CORS(app, resources={r"/api/*": {"origins": ["https://www.roblox.com", "https://*.robloxlabs.com"]}})
+CORS(app, resources={r"/api/*": {"origins": ["ads.luarmor.net"]}})
 limiter = Limiter(get_remote_address, app=app, default_limits=['20 per minute'])
 
 # ----------------------
@@ -357,8 +358,9 @@ def clean_old_keys():
 # Static Routes
 # ----------------------
 @app.route('/')
-def serve_index(): return send_from_directory('.', 'index.html')
-    @app.route('/style.css')
+def serve_index(): 
+    return send_from_directory('.', 'index.html')
+@app.route('/style.css')
 def serve_css():
     return send_from_directory('.', 'style.css')
 
@@ -366,7 +368,6 @@ def serve_css():
 # Run app
 # ----------------------
 if __name__ == '__main__':
-    import logging
     logging.basicConfig(level=logging.INFO)
     # Используем threaded=True для стабильной работы с async и flask-limiter
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), threaded=True)
