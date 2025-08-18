@@ -1,10 +1,7 @@
-Flask
-requests
-python-dotenv
-python-dateutil
-flask-limiter
+flask
 flask-cors
-flask-wtf
-flask-talisman
-bleach
-flask-security-too
+flask-limiter
+python-dotenv
+httpx
+pycryptodome
+python-dateutil
