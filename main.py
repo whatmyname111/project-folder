@@ -12,25 +12,12 @@ from flask import Flask, request, jsonify, send_from_directory, session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_cors import CORS
-import hashlib
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
-load_dotenv('/etc/secrets/.env')
-ENCRYPTION_SECRET = os.getenv("ENCRYPTION_SECRET").encode()
-salt = hashlib.sha256(ENCRYPTION_SECRET).digest()
-kdf = PBKDF2HMAC(
-    algorithm=hashes.SHA256(),
-    length=32,
-    salt=salt,
-    iterations=100000,
-)
-key = base64.urlsafe_b64encode(kdf.derive(ENCRYPTION_SECRET))
-cipher_suite = Fernet(key)
 
 # ----------------------
 # Constants / Config
 # ----------------------
+load_dotenv('/etc/secrets/.env')
+
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 ADMIN_KEY = os.getenv('ADMIN_KEY')
@@ -66,17 +53,7 @@ limiter = Limiter(get_remote_address, app=app, default_limits=['20 per minute'])
 # ----------------------
 def validate_key(key: str) -> bool:
     return bool(KEY_REGEX.match(key))
-    
-def encrypt_data(data: str) -> str:
-    return cipher_suite.encrypt(data.encode()).decode()
 
-def decrypt_data(encrypted_data: str) -> str:
-    return cipher_suite.decrypt(encrypted_data.encode()).decode()
-
-def get_user_id(hwid: str) -> str:
-    raw_id = f"{hwid}"
-    return encrypt_data(raw_id)
-    
 def validate_hwid(hwid: str) -> bool:
     return bool(HWID_REGEX.match(hwid))
 
@@ -116,6 +93,12 @@ def save_key(key: str = None) -> str:
         pass
     return None
 
+def get_user_id(ip: str, hwid: str) -> str:
+    return base64.b64encode(f"{ip}_{hwid}".encode()).decode()
+
+# ----------------------
+# API Routes
+# ----------------------
 @app.route('/api/clean_old_keys', methods=['POST'])
 def clean_old_keys():
     if not is_admin_request():
@@ -281,7 +264,7 @@ def serve_css():
 # ----------------------
 @app.route('/user/admin', methods=['GET', 'POST'])
 def admin_panel():
-    session.permanent = True
+    session.permanent = True  # включаем постоянную сессию
     if session.get('admin_xd'):
         return render_admin_page()
 
@@ -307,6 +290,7 @@ def admin_panel():
 
 def render_admin_page():
     try:
+        # Получаем данные из Supabase
         keys_resp = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=5)
         users_resp = requests.get(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS, timeout=5)
         if keys_resp.status_code != 200 or users_resp.status_code != 200:
@@ -315,6 +299,8 @@ def render_admin_page():
         users_data = users_resp.json()
     except requests.RequestException:
         return 'Failed to fetch data', 500
+
+    # HTML с темной темой и кнопками
     html = f"""
     <html>
     <head>
@@ -370,14 +356,19 @@ def render_admin_page():
         <table>
             <tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>
     """
+
+    # Таблица ключей
     for k in keys_data:
         html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td>"
         html += f"<td><button class='delete-key' onclick=\"deleteKey('{k['key']}')\">Delete</button></td></tr>"
+
+    # Таблица пользователей
     html += "</table><h2>Users</h2><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th><th>Action</th></tr>"
 
     for u in users_data:
         html += f"<tr><td>{u['user_id']}</td><td>{u['hwid']}</td><td>{u['cookies']}</td><td>{u['key']}</td><td>{u['registered_at']}</td>"
         html += f"<td><button class='delete-user' onclick=\"deleteUser('{u['hwid']}')\">Delete</button></td></tr>"
+
     html += "</table></body></html>"
 
     return html
