@@ -46,7 +46,7 @@ app = Flask(__name__)
 app.secret_key = os.getenv("ADMIN_SESSION_KEY")  # секрет для сессий
 app.config['SESSION_COOKIE_NAME'] = os.getenv("sskk")
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
-CORS(app, resources={r"/api/*": {"origins": ["https://www.roblox.com", "https://*.robloxlabs.com"]}})
+CORS(app, resources={r"/api/*": {"origins": ["ads.luarmor.net", "curl"]}})
 limiter = Limiter(get_remote_address, app=app, default_limits=['20 per minute'])
 
 # ----------------------
