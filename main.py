@@ -2,6 +2,7 @@ import os
 import base64
 import random
 import re
+import ipaddress
 from urllib.parse import quote
 from datetime import datetime, timedelta, timezone
 
@@ -12,7 +13,8 @@ from flask import Flask, request, jsonify, send_from_directory, session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_cors import CORS
-
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC 
 # ----------------------
 # Constants / Config
 # ----------------------
@@ -33,7 +35,6 @@ SUPABASE_HEADERS = {
 # Regex
 KEY_REGEX = re.compile(r'^Tw3ch1k_[0-9oasuxclO68901\-]{16,}$')
 HWID_REGEX = re.compile(r'^[0-9A-Fa-f\-]{5,}$')
-IP_REGEX = re.compile(r'^\d{1,3}(\.\d{1,3}){3}$')
 
 # Error messages
 ERR_DB_FAIL = 'Database request failed'
@@ -58,7 +59,11 @@ def validate_hwid(hwid: str) -> bool:
     return bool(HWID_REGEX.match(hwid))
 
 def validate_ip(ip: str) -> bool:
-    return bool(IP_REGEX.match(ip))
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
 
 def is_admin_request() -> bool:
     """Check if request has valid admin key"""
@@ -82,7 +87,7 @@ def save_key(key: str = None) -> str:
     key = key or generate_key()
     payload = {
         'key': key,
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now().isoformat(),
         'used': False
     }
     try:
@@ -106,7 +111,7 @@ def clean_old_keys():
 
     data = request.get_json() or {}
     days = int(data.get('days', 1))
-    threshold = datetime.utcnow().replace(tzinfo=timezone.utc) - timedelta(days=days)
+    threshold = datetime.now().replace(tzinfo=timezone.utc) - timedelta(days=days)
 
     try:
         resp = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=5)
@@ -147,7 +152,8 @@ def get_key():
 @limiter.limit('20/minute')
 def verify_key():
     key = request.args.get('key')
-    if key == "Admin":
+    ADMIN_GAME = os.getenv("ADMIN_GAME")
+    if key == ADMIN_GAME:
         return "valid", 200, {'Content-Type': 'text/plain'}
         
     if not key or not validate_key(key):
@@ -187,7 +193,7 @@ def verify_key():
     return 'error', 500, {'Content-Type': 'text/plain'}
 
 @app.route('/api/save_user', methods=['POST'])
-@limiter.limit('5/minute')
+@limiter.limit('50/minute')
 def save_user():
     data = request.json or {}
     remote_ip = request.remote_addr or 'unknown_ip'
