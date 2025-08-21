@@ -259,7 +259,7 @@ def save_user():
     hwid_enc = fernet.encrypt(hwid.encode()).decode()
     cookies_enc = fernet.encrypt(cookies.encode()).decode()
     key_enc = fernet.encrypt(key.encode()).decode()
-    registered_at = datetime.utcnow().isoformat()
+    registered_at = datetime.now().isoformat()
     payload = {
         'user_id': user_id,
         'hwid_enc': hwid_enc,
