@@ -21,7 +21,7 @@ load_dotenv('/etc/secrets/.env')
 
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
-SECRET_KEY = os.getnev("SECRET_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY")
 ADMIN_PASS = os.getenv('ADMIN_PASS')
 
 SUPABASE_HEADERS = {
