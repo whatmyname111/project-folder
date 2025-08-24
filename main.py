@@ -21,6 +21,7 @@ load_dotenv('/etc/secrets/.env')
 
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+SECRET_KEY = os.getnev("SECRET_KEY")
 ADMIN_PASS = os.getenv('ADMIN_PASS')
 
 SUPABASE_HEADERS = {
@@ -102,8 +103,9 @@ def save_key(key: str = None) -> str:
 def require_admin(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        if not session.get('admin_authenticated'):
-            return "Access denied", 403
+        secret = request.args.get('d')
+        if secret != SECRET_KEY or not session.get('admin_authenticated'):
+            return "Ur not admin!", 403
         return f(*args, **kwargs)
     return wrapper
 
