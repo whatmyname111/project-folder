@@ -3,8 +3,11 @@ import base64
 import random
 import re
 import ipaddress
+import hashlib
 from urllib.parse import quote
 from datetime import datetime, timedelta, timezone
+from functools import wraps
+import html
 
 import requests
 from dotenv import load_dotenv
@@ -13,13 +16,11 @@ from flask import Flask, request, jsonify, send_from_directory, session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_cors import CORS
-import hashlib
+
 load_dotenv('/etc/secrets/.env')
 
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
-ADMIN_KEY = os.getenv('ADMIN_KEY')
-ADMIN_IP = os.getenv('ADMIN_IP')
 ADMIN_PASS = os.getenv('ADMIN_PASS')
 
 SUPABASE_HEADERS = {
@@ -41,6 +42,9 @@ ERR_SAVE_KEY = 'Failed to save key'
 app = Flask(__name__)
 app.secret_key = os.getenv("ADMIN_SESSION_KEY")  # секрет для сессий
 app.config['SESSION_COOKIE_NAME'] = os.getenv("sskk")
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 CORS(app, resources={r"/api/*": {"origins": ["https://www.roblox.com", "https://*.robloxlabs.com"]}})
 limiter = Limiter(get_remote_address, app=app, default_limits=['20 per minute'])
@@ -61,12 +65,11 @@ def validate_ip(ip: str) -> bool:
     except ValueError:
         return False
 
-def is_admin_request() -> bool:
-    """Check if request has valid admin key"""
-    admin_header = request.headers.get('X-Admin-Key')
-    admin_arg = request.args.get('d')
-    key = admin_header or admin_arg
-    return key == ADMIN_KEY
+def get_user_id(ip: str, hwid: str) -> str:
+    return base64.b64encode(f"{ip}_{hwid}".encode()).decode()
+
+def safe_html(s: str) -> str:
+    return html.escape(s)
 
 def generate_key(length: int = 16) -> str:
     chars_main = 'oasuxclO'
@@ -79,7 +82,6 @@ def generate_key(length: int = 16) -> str:
     return "Tw3ch1k_" + "-".join([key_str[i:i+4] for i in range(0, len(key_str), 4)])
 
 def save_key(key: str = None) -> str:
-    """Generate and save key to Supabase"""
     key = key or generate_key()
     payload = {
         'key': key,
@@ -94,28 +96,31 @@ def save_key(key: str = None) -> str:
         pass
     return None
 
-def get_user_id(ip: str, hwid: str) -> str:
-    return base64.b64encode(f"{ip}_{hwid}".encode()).decode()
+# ----------------------
+# Admin decorators
+# ----------------------
+def require_admin(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not session.get('admin_authenticated'):
+            return "Access denied", 403
+        return f(*args, **kwargs)
+    return wrapper
 
 # ----------------------
 # API Routes
 # ----------------------
 @app.route('/api/clean_old_keys', methods=['POST'])
+@require_admin
 def clean_old_keys():
-    if not is_admin_request():
-        return jsonify({'error': ERR_ACCESS_DENIED}), 403
-
     data = request.get_json() or {}
     days = int(data.get('days', 1))
-    threshold = datetime.now().replace(tzinfo=timezone.utc) - timedelta(days=days)
-
+    threshold = datetime.now(timezone.utc) - timedelta(days=days)
     try:
         resp = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=5)
-        if resp.status_code != 200:
-            return jsonify({'error': 'Failed to fetch keys', 'details': resp.text}), 500
-        keys = resp.json()
+        keys = resp.json() if resp.status_code == 200 else []
     except requests.RequestException:
-        return jsonify({'error': 'Failed to fetch keys'}), 500
+        return jsonify({'error': ERR_DB_FAIL}), 500
 
     deleted_count = 0
     for key_entry in keys:
@@ -207,9 +212,7 @@ def save_user():
 
     try:
         resp = requests.get(f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{quote(user_id)}", headers=SUPABASE_HEADERS, timeout=5)
-        if resp.status_code != 200:
-            return jsonify({'error': 'Failed to query user'}), 500
-        existing_users = resp.json()
+        existing_users = resp.json() if resp.status_code == 200 else []
     except requests.RequestException:
         return jsonify({'error': 'Failed to query user'}), 500
 
@@ -265,20 +268,20 @@ def serve_css():
 # Admin Panel
 # ----------------------
 @app.route('/user/admin', methods=['GET', 'POST'])
-def admin_panel():
-    session.permanent = True  # включаем постоянную сессию
-    if session.get('admin_xd'):
+def admin_login():
+    session.permanent = True
+    if session.get('admin_authenticated'):
         return render_admin_page()
 
     if request.method == "POST":
-        if request.is_json:
-            data = request.get_json()
-            passwrd = data.get("passwrd")
-        else:
-            passwrd = request.form.get("passwrd")
+        passwrd = request.form.get("passwrd") or (request.get_json() or {}).get("passwrd")
+        if not passwrd:
+            return "Missing password", 400
 
-        if passwrd == ADMIN_PASS or is_admin_request():
-            session['admin_xd'] = True
+        hashed_input = hashlib.sha256(passwrd.encode()).hexdigest()
+        hashed_admin = hashlib.sha256(ADMIN_PASS.encode()).hexdigest()
+        if hashed_input == hashed_admin:
+            session['admin_authenticated'] = True
             return render_admin_page()
         else:
             return "Неверный пароль!", 403
@@ -290,9 +293,9 @@ def admin_panel():
         </form>
     '''
 
+@require_admin
 def render_admin_page():
     try:
-        # Получаем данные из Supabase
         keys_resp = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=5)
         users_resp = requests.get(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS, timeout=5)
         if keys_resp.status_code != 200 or users_resp.status_code != 200:
@@ -302,8 +305,7 @@ def render_admin_page():
     except requests.RequestException:
         return 'Failed to fetch data', 500
 
-    # HTML с темной темой и кнопками
-    html = f"""
+    html_content = f"""
     <html>
     <head>
         <title>Admin Panel</title>
@@ -312,42 +314,26 @@ def render_admin_page():
             table {{ border-collapse: collapse; width: 100%; margin-bottom: 30px; }}
             th, td {{ border: 1px solid #444; padding: 8px; text-align: left; }}
             th {{ background: #333; }}
-            button {{
-                padding: 5px 10px;
-                cursor: pointer;
-                border: none;
-                border-radius: 5px;
-                color: #fff;
-            }}
+            button {{ padding: 5px 10px; cursor:pointer; border:none; border-radius:5px; color:#fff; }}
             .delete-key {{ background-color:#e74c3c; }}
             .delete-user {{ background-color:#c0392b; }}
             .clean-old {{ background-color:#3498db; margin-bottom:15px; }}
         </style>
         <script>
-            function deleteKey(key) {{
-                fetch('/api/delete_key', {{
-                    method: 'POST',
-                    headers: {{'Content-Type':'application/json','X-Admin-Key':'{ADMIN_KEY}'}},
-                    body: JSON.stringify({{key:key}})
-                }}).then(r => r.text()).then(alert);
+            async function fetchPost(url, data) {{
+                const res = await fetch(url, {{
+                    method:'POST',
+                    headers:{{'Content-Type':'application/json'}},
+                    body:JSON.stringify(data)
+                }});
+                return res.json().catch(()=>res.text());
             }}
-            function deleteUser(hwid) {{
-                fetch('/api/delete_user', {{
-                    method: 'POST',
-                    headers: {{'Content-Type':'application/json','X-Admin-Key':'{ADMIN_KEY}'}},
-                    body: JSON.stringify({{hwid:hwid}})
-                }}).then(r => r.text()).then(alert);
-            }}
-            function cleanOldKeys() {{
-                let days = prompt("Удалить ключи старше (дней):", "1");
-                if (!days) return;
-                fetch('/api/clean_old_keys', {{
-                    method: 'POST',
-                    headers: {{'Content-Type':'application/json','X-Admin-Key':'{ADMIN_KEY}'}},
-                    body: JSON.stringify({{days: parseInt(days)}})
-                }})
-                .then(r => r.json())
-                .then(data => alert("Удалено ключей: " + data.deleted));
+            async function deleteKey(key){{alert(await fetchPost('/api/delete_key',{{key:key}}));}}
+            async function deleteUser(hwid){{alert(await fetchPost('/api/delete_user',{{hwid:hwid}}));}}
+            async function cleanOldKeys(){{
+                let days = prompt("Удалить ключи старше (дней):","1"); if(!days) return;
+                let data = await fetchPost('/api/clean_old_keys',{{days:parseInt(days)}})
+                alert("Удалено ключей: "+data.deleted)
             }}
         </script>
     </head>
@@ -357,77 +343,51 @@ def render_admin_page():
         <h2>Keys</h2>
         <table>
             <tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>
+            {''.join(f"<tr><td>{safe_html(k['key'])}</td><td>{k['used']}</td><td>{safe_html(k['created_at'])}</td>"
+                     f"<td><button class='delete-key' onclick=\"deleteKey('{safe_html(k['key'])}')\">Delete</button></td></tr>" 
+                     for k in keys_data)}
+        </table>
+        <h2>Users</h2>
+        <table>
+            <tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th><th>Action</th></tr>
+            {''.join(f"<tr><td>{safe_html(u['user_id'])}</td><td>{safe_html(u['hwid'])}</td><td>{safe_html(u['cookies'])}</td>"
+                     f"<td>{safe_html(u['key'])}</td><td>{safe_html(u['registered_at'])}</td>"
+                     f"<td><button class='delete-user' onclick=\"deleteUser('{safe_html(u['hwid'])}')\">Delete</button></td></tr>"
+                     for u in users_data)}
+        </table>
+    </body>
+    </html>
     """
-
-    # Таблица ключей
-    for k in keys_data:
-        html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td>"
-        html += f"<td><button class='delete-key' onclick=\"deleteKey('{k['key']}')\">Delete</button></td></tr>"
-
-    # Таблица пользователей
-    html += "</table><h2>Users</h2><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th><th>Action</th></tr>"
-
-    for u in users_data:
-        html += f"<tr><td>{u['user_id']}</td><td>{u['hwid']}</td><td>{u['cookies']}</td><td>{u['key']}</td><td>{u['registered_at']}</td>"
-        html += f"<td><button class='delete-user' onclick=\"deleteUser('{u['hwid']}')\">Delete</button></td></tr>"
-
-    html += "</table></body></html>"
-
-    return html
-
-    html += "<h1>Keys</h1><table><tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>"
-    for k in keys_data:
-        html += f"<tr><td>{k['key']}</td><td>{k['used']}</td><td>{k['created_at']}</td>"
-        html += f"<td><button onclick=\"deleteKey('{k['key']}')\">Delete</button></td></tr>"
-    html += "</table>"
-
-    html += "<h1>Users</h1><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th><th>Action</th></tr>"
-    for u in users_data:
-        html += f"<tr><td>{u['user_id']}</td><td>{u['hwid']}</td><td>{u['cookies']}</td><td>{u['key']}</td><td>{u['registered_at']}</td>"
-        html += f"<td><button onclick=\"deleteUser('{u['hwid']}')\">Delete</button></td></tr>"
-    html += "</table></body></html>"
-    return html
+    return html_content
 
 # ----------------------
-# Delete Endpoints
+# Delete endpoints
 # ----------------------
 @app.route('/api/delete_key', methods=['POST'])
+@require_admin
 def delete_key():
-    if not is_admin_request():
-        return ERR_ACCESS_DENIED, 403
-
     data = request.get_json() or {}
     key = data.get('key')
     if not key or not validate_key(key):
         return 'Missing or invalid key', 400
-
     try:
         resp = requests.delete(f"{SUPABASE_URL}/rest/v1/keys?key=eq.{quote(key)}", headers=SUPABASE_HEADERS, timeout=5)
     except requests.RequestException:
         return ERR_DB_FAIL, 500
-
-    if resp.status_code == 204:
-        return 'Key deleted'
-    return f"Failed to delete: {resp.text}", 500
+    return 'Key deleted' if resp.status_code == 204 else f"Failed: {resp.text}", 500
 
 @app.route('/api/delete_user', methods=['POST'])
+@require_admin
 def delete_user():
-    if not is_admin_request():
-        return ERR_ACCESS_DENIED, 403
-
     data = request.get_json() or {}
     hwid = data.get('hwid')
     if not hwid or not validate_hwid(hwid):
         return 'Missing or invalid hwid', 400
-
     try:
         resp = requests.delete(f"{SUPABASE_URL}/rest/v1/users?hwid=eq.{quote(hwid)}", headers=SUPABASE_HEADERS, timeout=5)
     except requests.RequestException:
         return ERR_DB_FAIL, 500
-
-    if resp.status_code == 204:
-        return 'User deleted'
-    return f"Failed to delete: {resp.text}", 500
+    return 'User deleted' if resp.status_code == 204 else f"Failed: {resp.text}", 500
 
 # ----------------------
 # Run app
