@@ -15,9 +15,6 @@ from flask import Flask, request, jsonify, send_from_directory, session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_cors import CORS
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
 
 # ----------------------
 # Constants / Config
@@ -27,10 +24,9 @@ load_dotenv('/etc/secrets/.env')
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 ADMIN_KEY = os.getenv('ADMIN_KEY')
-ADMIN_IP = os.getenv('ADMIN_IP')  # Unused, but kept for compatibility
+ADMIN_IP = os.getenv('ADMIN_IP')
 ADMIN_PASS = os.getenv('ADMIN_PASS')
 ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET')
-ENCRYPTION_SALT = base64.b64decode(os.getenv('ENCRYPTION_SALT', 'c29tZV9zYWx0Xw=='))  # Default for demo, set in env
 
 SUPABASE_HEADERS = {
     'apikey': SUPABASE_KEY,
@@ -49,26 +45,29 @@ ERR_SAVE_KEY = 'Failed to save key'
 
 # Flask app
 app = Flask(__name__)
-app.secret_key = os.getenv("ADMIN_SESSION_KEY")  # секрет для сессий
-app.config['SESSION_COOKIE_NAME'] = os.getenv("sskk")
+app.secret_key = os.getenv("ADMIN_SESSION_KEY", "default_secret_key")
+app.config['SESSION_COOKIE_NAME'] = os.getenv("sskk", "session_cookie")
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 CORS(app, resources={r"/api/*": {"origins": ["ads.luarmor.net", "curl"]}})
 limiter = Limiter(get_remote_address, app=app, default_limits=['20 per minute'])
 
 # ----------------------
-# Utility functions
+# Utility functions (заменяем криптографию на хэши + base64)
 # ----------------------
-def get_fernet():
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=ENCRYPTION_SALT,
-        iterations=100000,
-    )
-    key = base64.urlsafe_b64encode(kdf.derive(ENCRYPTION_SECRET.encode()))
-    return Fernet(key)
+def encode_data(data: str) -> str:
+    """Кодируем данные с помощью base64"""
+    return base64.urlsafe_b64encode(data.encode()).decode()
 
-fernet = get_fernet()
+def decode_data(encoded_data: str) -> str:
+    """Декодируем base64 данные"""
+    try:
+        return base64.urlsafe_b64decode(encoded_data.encode()).decode()
+    except:
+        return ""
+
+def hash_data(data: str) -> str:
+    """Создаем хэш данных"""
+    return hashlib.sha256(data.encode()).hexdigest()
 
 def validate_key(key: str) -> bool:
     return bool(KEY_REGEX.match(key))
@@ -92,31 +91,31 @@ def generate_key(length: int = 16) -> str:
     num_digits = int(length * 0.7)
     num_main = length - num_digits
     key_chars = [secrets.choice(chars_digits) for _ in range(num_digits)] + [secrets.choice(chars_main) for _ in range(num_main)]
-    secrets.SystemRandom().shuffle(key_chars)  # Secure shuffle
+    secrets.SystemRandom().shuffle(key_chars)
     key_str = ''.join(key_chars)
     return "Tw3ch1k_" + "-".join([key_str[i:i+4] for i in range(0, len(key_str), 4)])
 
 def save_key(key: str = None) -> str:
     """Generate and save key to Supabase"""
     key = key or generate_key()
-    key_hash = hashlib.sha256(key.encode()).hexdigest()
-    key_enc = fernet.encrypt(key.encode()).decode()
+    key_hash = hash_data(key)
+    key_enc = encode_data(key)
     payload = {
         'key_hash': key_hash,
         'key_enc': key_enc,
-        'created_at': datetime.now().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'used': False
     }
     try:
         resp = httpx.post(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, json=payload, timeout=5)
         if resp.status_code == 201:
             return key
-    except httpx.RequestError:
-        pass
+    except httpx.RequestError as e:
+        print(f"Error saving key: {e}")
     return None
 
 def get_user_id(ip: str, hwid: str) -> str:
-    return hashlib.sha256(f"{ip}_{hwid}".encode()).hexdigest()
+    return hash_data(f"{ip}_{hwid}")
 
 # ----------------------
 # API Routes
@@ -128,15 +127,15 @@ def clean_old_keys():
 
     data = request.get_json() or {}
     days = int(data.get('days', 1))
-    threshold = datetime.now().replace(tzinfo=timezone.utc) - timedelta(days=days)
+    threshold = datetime.now(timezone.utc) - timedelta(days=days)
 
     try:
-        resp = httpx.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=5)
+        resp = httpx.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=10)
         if resp.status_code != 200:
             return jsonify({'error': 'Failed to fetch keys', 'details': resp.text}), 500
         keys = resp.json()
-    except httpx.RequestError:
-        return jsonify({'error': 'Failed to fetch keys'}), 500
+    except httpx.RequestError as e:
+        return jsonify({'error': f'Failed to fetch keys: {e}'}), 500
 
     deleted_count = 0
     for key_entry in keys:
@@ -145,15 +144,24 @@ def clean_old_keys():
             continue
         try:
             created_dt = parse_date(created)
-        except Exception:
+            if created_dt.tzinfo is None:
+                created_dt = created_dt.replace(tzinfo=timezone.utc)
+        except Exception as e:
+            print(f"Error parsing date {created}: {e}")
             continue
+            
         if created_dt < threshold:
             try:
-                del_resp = httpx.delete(f"{SUPABASE_URL}/rest/v1/keys?key_hash=eq.{quote(key_entry['key_hash'])}", headers=SUPABASE_HEADERS, timeout=5)
+                del_resp = httpx.delete(
+                    f"{SUPABASE_URL}/rest/v1/keys?key_hash=eq.{quote(key_entry['key_hash'])}", 
+                    headers=SUPABASE_HEADERS, 
+                    timeout=5
+                )
                 if del_resp.status_code == 204:
                     deleted_count += 1
-            except httpx.RequestError:
-                pass
+            except httpx.RequestError as e:
+                print(f"Error deleting key {key_entry['key_hash']}: {e}")
+                
     return jsonify({'deleted': deleted_count})
 
 @app.route('/api/get_key')
@@ -169,15 +177,17 @@ def get_key():
 def verify_key():
     key = request.args.get('key')
     ADMIN_GAME = os.getenv("ADMIN_GAME")
+    
     if key == ADMIN_GAME:
         return "valid", 200, {'Content-Type': 'text/plain'}
         
     if not key or not validate_key(key):
         return 'invalid', 200, {'Content-Type': 'text/plain'}    
-    key_hash = hashlib.sha256(key.encode()).hexdigest()
+        
+    key_hash = hash_data(key)
     try:
         resp = httpx.get(f"{SUPABASE_URL}/rest/v1/keys?key_hash=eq.{quote(key_hash)}", headers=SUPABASE_HEADERS, timeout=5)
-    except httpx.RequestError:
+    except httpx.RequestError as e:
         return 'error', 500, {'Content-Type': 'text/plain'}
 
     if resp.status_code != 200 or not resp.json():
@@ -189,7 +199,9 @@ def verify_key():
 
     try:
         created_at = parse_date(key_data['created_at'])
-    except Exception:
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+    except Exception as e:
         return 'error', 500, {'Content-Type': 'text/plain'}
 
     if datetime.now(timezone.utc) - created_at > timedelta(hours=24):
@@ -231,19 +243,22 @@ def save_user():
         if resp.status_code != 200:
             return jsonify({'error': 'Failed to query user'}), 500
         existing_users = resp.json()
-    except httpx.RequestError:
-        return jsonify({'error': 'Failed to query user'}), 500
+    except httpx.RequestError as e:
+        return jsonify({'error': f'Failed to query user: {e}'}), 500
 
     if existing_users:
         u = existing_users[0]
-        user_key = fernet.decrypt(u['key_enc'].encode()).decode()
-        return jsonify({'status': 'exists', 'key': user_key, 'registered_at': u['registered_at']})
+        try:
+            user_key = decode_data(u['key_enc'])
+            return jsonify({'status': 'exists', 'key': user_key, 'registered_at': u['registered_at']})
+        except:
+            return jsonify({'error': 'Failed to decode user key'}), 500
 
     if key:
         if not validate_key(key):
             key = save_key()
         else:
-            key_hash = hashlib.sha256(key.encode()).hexdigest()
+            key_hash = hash_data(key)
             try:
                 resp = httpx.get(f"{SUPABASE_URL}/rest/v1/keys?key_hash=eq.{quote(key_hash)}", headers=SUPABASE_HEADERS, timeout=5)
                 if resp.status_code != 200 or not resp.json():
@@ -256,10 +271,10 @@ def save_user():
     if not key:
         return jsonify({'error': ERR_SAVE_KEY}), 500
 
-    hwid_enc = fernet.encrypt(hwid.encode()).decode()
-    cookies_enc = fernet.encrypt(cookies.encode()).decode()
-    key_enc = fernet.encrypt(key.encode()).decode()
-    registered_at = datetime.now().isoformat()
+    hwid_enc = encode_data(hwid)
+    cookies_enc = encode_data(cookies)
+    key_enc = encode_data(key)
+    registered_at = datetime.now(timezone.utc).isoformat()
     payload = {
         'user_id': user_id,
         'hwid_enc': hwid_enc,
@@ -272,8 +287,8 @@ def save_user():
         resp = httpx.post(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS, json=payload, timeout=5)
         if resp.status_code != 201:
             return jsonify({'error': 'Failed to save user'}), 500
-    except httpx.RequestError:
-        return jsonify({'error': 'Failed to save user'}), 500
+    except httpx.RequestError as e:
+        return jsonify({'error': f'Failed to save user: {e}'}), 500
 
     return jsonify({'status': 'saved', 'key': key, 'registered_at': registered_at})
 
@@ -293,7 +308,7 @@ def serve_css():
 # ----------------------
 @app.route('/user/admin', methods=['GET', 'POST'])
 def admin_panel():
-    session.permanent = True  # включаем постоянную сессию
+    session.permanent = True
     if session.get('admin_xd'):
         return render_admin_page()
 
@@ -304,7 +319,7 @@ def admin_panel():
         else:
             passwrd = request.form.get("passwrd")
 
-        if passwrd == ADMIN_PASS or is_admin_session():
+        if passwrd == ADMIN_PASS:
             session['admin_xd'] = True
             return render_admin_page()
         else:
@@ -319,23 +334,22 @@ def admin_panel():
 
 def render_admin_page():
     try:
-        # Получаем данные из Supabase
-        keys_resp = httpx.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=5)
-        users_resp = httpx.get(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS, timeout=5)
+        keys_resp = httpx.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=10)
+        users_resp = httpx.get(f"{SUPABASE_URL}/rest/v1/users", headers=SUPABASE_HEADERS, timeout=10)
         if keys_resp.status_code != 200 or users_resp.status_code != 200:
             return 'Failed to fetch data', 500
         keys_data = keys_resp.json()
         users_data = users_resp.json()
-    except httpx.RequestError:
-        return 'Failed to fetch data', 500
+    except httpx.RequestError as e:
+        return f'Failed to fetch data: {e}', 500
 
     # Decrypt for display
     for k in keys_data:
-        k['key_dec'] = fernet.decrypt(k['key_enc'].encode()).decode()
+        k['key_dec'] = decode_data(k['key_enc'])
     for u in users_data:
-        u['hwid_dec'] = fernet.decrypt(u['hwid_enc'].encode()).decode()
-        u['cookies_dec'] = fernet.decrypt(u['cookies_enc'].encode()).decode()
-        u['key_dec'] = fernet.decrypt(u['key_enc'].encode()).decode()
+        u['hwid_dec'] = decode_data(u['hwid_enc'])
+        u['cookies_dec'] = decode_data(u['cookies_enc'])
+        u['key_dec'] = decode_data(u['key_enc'])
 
     # HTML с темной темой и кнопками
     html_content = f"""
@@ -389,7 +403,7 @@ def render_admin_page():
     <body>
         <h1>Admin Panel</h1>
         <button class="clean-old" onclick="cleanOldKeys()">Удалить старые ключи</button>
-        <h2>Keys</h2>
+        <h2>Keys (Total: {len(keys_data)})</h2>
         <table>
             <tr><th>Key</th><th>Used</th><th>Created At</th><th>Action</th></tr>
     """
@@ -400,10 +414,10 @@ def render_admin_page():
         html_content += f"<td><button class='delete-key' onclick=\"deleteKey('{html.escape(k['key_dec'])}')\">Delete</button></td></tr>"
 
     # Таблица пользователей
-    html_content += "</table><h2>Users</h2><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th><th>Action</th></tr>"
+    html_content += f"</table><h2>Users (Total: {len(users_data)})</h2><table><tr><th>User ID</th><th>HWID</th><th>Cookies</th><th>Key</th><th>Registered At</th><th>Action</th></tr>"
 
     for u in users_data:
-        html_content += f"<tr><td>{html.escape(u['user_id'])}</td><td>{html.escape(u['hwid_dec'])}</td><td>{html.escape(u['cookies_dec'])}</td><td>{html.escape(u['key_dec'])}</td><td>{html.escape(u['registered_at'])}</td>"
+        html_content += f"<tr><td>{html.escape(u['user_id'])}</td><td>{html.escape(u['hwid_dec'])}</td><td>{html.escape(u['cookies_dec'][:50])}...</td><td>{html.escape(u['key_dec'])}</td><td>{html.escape(u['registered_at'])}</td>"
         html_content += f"<td><button class='delete-user' onclick=\"deleteUser('{html.escape(u['user_id'])}')\">Delete</button></td></tr>"
 
     html_content += "</table></body></html>"
@@ -423,11 +437,11 @@ def delete_key():
     if not key or not validate_key(key):
         return 'Missing or invalid key', 400
 
-    key_hash = hashlib.sha256(key.encode()).hexdigest()
+    key_hash = hash_data(key)
     try:
         resp = httpx.delete(f"{SUPABASE_URL}/rest/v1/keys?key_hash=eq.{quote(key_hash)}", headers=SUPABASE_HEADERS, timeout=5)
-    except httpx.RequestError:
-        return ERR_DB_FAIL, 500
+    except httpx.RequestError as e:
+        return f'{ERR_DB_FAIL}: {e}', 500
 
     if resp.status_code == 204:
         return 'Key deleted'
@@ -445,8 +459,8 @@ def delete_user():
 
     try:
         resp = httpx.delete(f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{quote(user_id)}", headers=SUPABASE_HEADERS, timeout=5)
-    except httpx.RequestError:
-        return ERR_DB_FAIL, 500
+    except httpx.RequestError as e:
+        return f'{ERR_DB_FAIL}: {e}', 500
 
     if resp.status_code == 204:
         return 'User deleted'
@@ -456,4 +470,4 @@ def delete_user():
 # Run app
 # ----------------------
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
