@@ -8,7 +8,8 @@ from urllib.parse import quote
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 import html
-
+import threading
+import time
 import requests
 from dotenv import load_dotenv
 from dateutil.parser import parse as parse_date
@@ -82,6 +83,55 @@ def generate_key(length: int = 16) -> str:
     key_str = ''.join(key_chars)
     return "Tw3ch1k_" + "-".join([key_str[i:i+4] for i in range(0, len(key_str), 4)])
 
+def cleanup_old_keys_and_users():
+    while True:
+        try:
+            # Время 24 часа назад
+            threshold = datetime.now(timezone.utc) - timedelta(hours=24)
+
+            # Получаем все ключи
+            resp = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=10)
+            if resp.status_code != 200:
+                print("Failed to fetch keys")
+                time.sleep(86400)
+                continue
+
+            keys = resp.json()
+            for key_entry in keys:
+                created_at = key_entry.get('created_at')
+                key_value = key_entry.get('key')
+                if not created_at or not key_value:
+                    continue
+                created_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                if created_dt < threshold:
+                    # Удаляем ключ
+                    try:
+                        del_resp = requests.delete(
+                            f"{SUPABASE_URL}/rest/v1/keys?key=eq.{quote(key_value)}",
+                            headers=SUPABASE_HEADERS,
+                            timeout=5
+                        )
+                        if del_resp.status_code == 204:
+                            print(f"Deleted key {key_value}")
+                            # Удаляем пользователей с этим ключом
+                            user_del = requests.delete(
+                                f"{SUPABASE_URL}/rest/v1/users?key=eq.{quote(key_value)}",
+                                headers=SUPABASE_HEADERS,
+                                timeout=5
+                            )
+                            if user_del.status_code == 204:
+                                print(f"Deleted users with key {key_value}")
+                    except requests.RequestException:
+                        pass
+
+        except Exception as e:
+            print("Cleanup error:", e)
+
+        # Ждём 24 часа
+        time.sleep(24 * 3600)
+
+# Запуск в отдельном потоке
+threading.Thread(target=cleanup_old_keys_and_users, daemon=True).start()
 def save_key(key: str = None) -> str:
     key = key or generate_key()
     payload = {
