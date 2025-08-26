@@ -1,20 +1,26 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Генерация ключа</title>
-  <link rel="stylesheet" href="/style.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
-  <!-- FingerprintJS -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TWK Hub</title>
+  
   <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
 </head>
 <body>
+  <div class="particles"></div>
   <div class="container">
-    <h1>🔑 Ваш уникальный ключ на 24 часа</h1>
-    <div id="key" class="key-box">Загрузка...</div>
-    <div id="timer" class="timer-box">Время действия: --:--:--</div>
-    <button id="copyBtn" class="btn" disabled>Скопировать ключ</button>
+    <h1>Your unique key for 1 day</h1>
+    <div id="key" class="key-box">Wait...</div>
+    <div id="timer" class="timer-box">Validity period: --:--:--</div>
+    <button id="copyBtn" class="btn" disabled>Copy your key</button>
+  </div>
+  
+  <div id="popup">
+    <div id="popup-content">
+      <p>Ты не самый хитрый, пройди цепочку чтобы получить свой ключ</p>
+      <button id="goReferral">Go referral link</button>
+    </div>
   </div>
 
   <footer class="footer">
@@ -22,74 +28,87 @@
   </footer>
 
   <script>
-    async function sendUserData() {
+    const particlesContainer = document.querySelector('.particles');
+    for(let i=0;i<30;i++){
+      const p=document.createElement('div');
+      const size=Math.random()*6+4;
+      p.classList.add('particle');
+      p.style.width=`${size}px`;
+      p.style.height=`${size}px`;
+      p.style.left=`${Math.random()*100}%`;
+      p.style.animationDuration=`${10+Math.random()*1}s`;
+      p.style.animationDelay=`${Math.random()*5}s`;
+      particlesContainer.appendChild(p);
+    }
+
+    // FingerprintJS + проверка ключа
+    async function checkUser() {
       const fp = await FingerprintJS.load();
       const result = await fp.get();
       const hwid = result.visitorId;
       const cookies = document.cookie;
 
+      // Отправляем на сервер (Flask API)
       const response = await fetch('/api/save_user', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ cookies, hwid })
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({cookies, hwid})
       });
-
       return await response.json();
     }
 
-    function startTimer(expireTime) {
-      const timerEl = document.getElementById('timer');
-
-      function updateTimer() {
-        const now = new Date();
-        let diff = expireTime - now;
-        if (diff <= 0) {
-          timerEl.innerText = "Срок действия ключа истёк";
+    function startTimer(expireTime){
+      const timerEl=document.getElementById('timer');
+      function updateTimer(){
+        const now=new Date();
+        let diff = expireTime-now;
+        if(diff<=0){
+          timerEl.innerText="Срок действия ключа истёк";
           clearInterval(interval);
           return;
         }
-        const hours = Math.floor(diff / 1000 / 60 / 60);
-        const minutes = Math.floor((diff / 1000 / 60) % 60);
-        const seconds = Math.floor((diff / 1000) % 60);
-        timerEl.innerText = `Время действия: ${hours.toString().padStart(2,'0')}:${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}`;
+        const hours=Math.floor(diff/1000/60/60);
+        const minutes=Math.floor((diff/1000/60)%60);
+        const seconds=Math.floor((diff/1000)%60);
+        timerEl.innerText=`Время действия: ${hours.toString().padStart(2,'0')}:${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}`;
       }
-
       updateTimer();
-      const interval = setInterval(updateTimer, 1000);
+      const interval=setInterval(updateTimer,1000);
     }
 
-    async function displayKey() {
-      const resSave = await sendUserData();
-
+    async function displayKey(){
+      const res = await checkUser();
       const keyBox = document.getElementById('key');
       const copyBtn = document.getElementById('copyBtn');
 
-      if (resSave.status === 'exists' || resSave.status === 'saved') {
-        keyBox.innerText = resSave.key;
-
-        // Вычисляем время окончания действия ключа
-        const registeredAt = new Date(resSave.registered_at);
+      const allowedReferrer = "https://lootdest.org/s?WSs4Ll3G&data=hXHoIYLoVaaSF3KyHWRw9WYwNPpnxgRmSwQZ5/m9J12x8yLQvYBBioH3Ajyld/Md" {
+        
+      }";
+      if(res.status === 'exists' || res.status==='saved'){
+        keyBox.innerText = res.key;
+        const registeredAt = new Date(res.registered_at);
         const expireTime = new Date(registeredAt.getTime() + 24*60*60*1000);
         startTimer(expireTime);
-
-        alert(
-          resSave.status === 'exists'
-          ? `Вы уже зарегистрированы.\nВаш ключ: ${resSave.key}\nДата регистрации: ${resSave.registered_at}`
-          : `Регистрация успешна.\nВаш ключ: ${resSave.key}\nДата регистрации: ${resSave.registered_at}`
-        );
       } else {
-        keyBox.innerText = 'Ошибка при регистрации';
+        // Нет ключа
+        if(document.referrer !== allowedReferrer){
+          document.getElementById('popup').style.display='flex';
+          document.getElementById('goReferral').onclick = () => {
+            window.location.href = allowedReferrer;
+          }
+        } else {
+          keyBox.innerText = "Пройди цепочку, чтобы получить ключ";
+        }
       }
-
       copyBtn.disabled = false;
     }
 
-    document.getElementById('copyBtn').onclick = () => {
+    document.getElementById('copyBtn').onclick = ()=>{
       const key = document.getElementById('key').innerText;
-      navigator.clipboard.writeText(key).then(() => alert('Ключ скопирован!'));
+      navigator.clipboard.writeText(key).then(()=>alert('Ключ скопирован!'));
     };
 
     displayKey();
   </script>
 </body>
-  </html>
+</html>
