@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TWK Hub</title>
-  
+  <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
 </head>
 <body>
@@ -16,7 +16,7 @@
     <button id="copyBtn" class="btn" disabled>Copy your key</button>
   </div>
   
-  <div id="popup">
+  <div id="popup" style="display:none;">
     <div id="popup-content">
       <p>Ты не самый хитрый, пройди цепочку чтобы получить свой ключ</p>
       <button id="goReferral">Go referral link</button>
@@ -28,6 +28,7 @@
   </footer>
 
   <script>
+    // Частицы
     const particlesContainer = document.querySelector('.particles');
     for(let i=0;i<30;i++){
       const p=document.createElement('div');
@@ -36,7 +37,7 @@
       p.style.width=`${size}px`;
       p.style.height=`${size}px`;
       p.style.left=`${Math.random()*100}%`;
-      p.style.animationDuration=`${10+Math.random()*1}s`;
+      p.style.animationDuration=`${10+Math.random()*10}s`;
       p.style.animationDelay=`${Math.random()*5}s`;
       particlesContainer.appendChild(p);
     }
@@ -48,7 +49,6 @@
       const hwid = result.visitorId;
       const cookies = document.cookie;
 
-      // Отправляем на сервер (Flask API)
       const response = await fetch('/api/save_user', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -81,17 +81,17 @@
       const keyBox = document.getElementById('key');
       const copyBtn = document.getElementById('copyBtn');
 
-      const allowedReferrer = "https://lootdest.org/s?WSs4Ll3G&data=hXHoIYLoVaaSF3KyHWRw9WYwNPpnxgRmSwQZ5/m9J12x8yLQvYBBioH3Ajyld/Md" {
-        
-      }";
+      const allowedReferrer = "https://lootdest.org/s?WSs4Ll3G&data=hXHoIYLoVaaSF3KyHWRw9WYwNPpnxgRmSwQZ5/m9J12x8yLQvYBBioH3Ajyld/Md";
+
       if(res.status === 'exists' || res.status==='saved'){
         keyBox.innerText = res.key;
         const registeredAt = new Date(res.registered_at);
         const expireTime = new Date(registeredAt.getTime() + 24*60*60*1000);
         startTimer(expireTime);
+        copyBtn.disabled = false;
       } else {
         // Нет ключа
-        if(document.referrer !== allowedReferrer){
+        if(!document.referrer.startsWith(allowedReferrer)){
           document.getElementById('popup').style.display='flex';
           document.getElementById('goReferral').onclick = () => {
             window.location.href = allowedReferrer;
@@ -100,7 +100,6 @@
           keyBox.innerText = "Пройди цепочку, чтобы получить ключ";
         }
       }
-      copyBtn.disabled = false;
     }
 
     document.getElementById('copyBtn').onclick = ()=>{
