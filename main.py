@@ -263,15 +263,6 @@ def clean_old_keys():
     
     return jsonify({'deleted': deleted_count})
 
-@app.route('/api/get_key')
-@limiter.limit('10/minute')
-def get_key():
-    """Получение нового ключа"""
-    key = save_key()
-    if not key:
-        return jsonify({'error': ERR_SAVE_KEY}), 500
-    return jsonify({'key': key})
-
 @app.route('/api/verify_key')
 @limiter.limit('20/minute')
 def verify_key():
