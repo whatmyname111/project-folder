@@ -9,13 +9,14 @@
 </head>
 <body>
   <div class="particles"></div>
+
   <div class="container">
     <h1>Your unique key for 1 day</h1>
     <div id="key" class="key-box">Wait...</div>
     <div id="timer" class="timer-box">Validity period: --:--:--</div>
     <button id="copyBtn" class="btn" disabled>Copy your key</button>
   </div>
-  
+
   <div id="popup" style="display:none;">
     <div id="popup-content">
       <p>Ты не самый хитрый, пройди цепочку чтобы получить свой ключ</p>
@@ -80,10 +81,14 @@
       const res = await checkUser();
       const keyBox = document.getElementById('key');
       const copyBtn = document.getElementById('copyBtn');
+      const popup = document.getElementById('popup');
+      const goReferral = document.getElementById('goReferral');
 
       const allowedReferrer = "https://lootdest.org/s?WSs4Ll3G&data=hXHoIYLoVaaSF3KyHWRw9WYwNPpnxgRmSwQZ5/m9J12x8yLQvYBBioH3Ajyld/Md";
+      const ref = document.referrer || "";
 
-      if(res.status === 'exists' || res.status==='saved'){
+      if(res.status === 'exists' || res.status === 'saved'){
+        // Пользователь уже имеет ключ → показываем
         keyBox.innerText = res.key;
         const registeredAt = new Date(res.registered_at);
         const expireTime = new Date(registeredAt.getTime() + 24*60*60*1000);
@@ -91,9 +96,10 @@
         copyBtn.disabled = false;
       } else {
         // Нет ключа
-        if(!document.referrer.startsWith(allowedReferrer)){
-          document.getElementById('popup').style.display='flex';
-          document.getElementById('goReferral').onclick = () => {
+        if(!ref.startsWith(allowedReferrer)){
+          // Показываем popup
+          popup.style.display='flex';
+          goReferral.onclick = () => {
             window.location.href = allowedReferrer;
           }
         } else {
