@@ -407,11 +407,11 @@ def render_admin_page():
 # ----------------------
 # Delete endpoints
 # ----------------------
-@app.route("/api/checkUpdate/KeySystem", methods = ['POST'])
+@app.route("/api/checkUpdate/KeySystem", methods = ['GET'])
 def checkUpdate():
   return jsonify({'1.0.0'})
   
-@app.route("/api/GetScript/KeySystem")
+@app.route("/api/GetScript/KeySystem", methods ≈ ['GET'])
 def GetScript():
   return jsonify({''})
 
