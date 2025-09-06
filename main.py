@@ -411,7 +411,7 @@ def render_admin_page():
 def checkUpdate():
   return jsonify({'1.0.0'})
   
-@app.route("/api/GetScript/KeySystem", methods ≈ ['GET'])
+@app.route("/api/GetScript/KeySystem", methods = ['GET'])
 def GetScript():
   return jsonify({''})
 
