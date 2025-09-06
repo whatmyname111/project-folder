@@ -409,7 +409,10 @@ def render_admin_page():
 # ----------------------
 @app.route("/api/checkUpdate/KeySystem", methods = ['GET'])
 def checkUpdate():
-  return jsonify({'version':'1.0.0'})
+  return jsonify({
+  "update_available": "false",
+  "download_url": "https://example.com/path/to/script"
+  })
   
 @app.route("/api/GetScript/KeySystem", methods = ['GET'])
 def GetScript():
