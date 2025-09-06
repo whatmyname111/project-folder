@@ -409,11 +409,11 @@ def render_admin_page():
 # ----------------------
 @app.route("/api/checkUpdate/KeySystem", methods = ['GET'])
 def checkUpdate():
-  return jsonify({'1.0.0'})
+  return jsonify({'version':'1.0.0'})
   
 @app.route("/api/GetScript/KeySystem", methods = ['GET'])
 def GetScript():
-  return jsonify({''})
+  return jsonify({'loadURL':''})
 
 @app.route('/api/delete_key', methods=['POST'])
 @require_admin
