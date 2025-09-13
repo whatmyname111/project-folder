@@ -410,7 +410,10 @@ def render_admin_page():
 @app.route("/api/checkUpdate/KeySystem", methods = ['GET'])
 def checkUpdate():
   return jsonify({"update_available": False})
-  
+@app.route("/api/AntiKick", methods = ['GET'])
+def antikick():
+    return "pastefy.app/0vPA1qOu/raw"
+
 @app.route("/api/GetScript/KeySystem", methods = ['GET'])
 def GetScript():
   return jsonify({'loadURL':''})
