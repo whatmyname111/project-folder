@@ -126,6 +126,21 @@ def update_stats(event_type: str, data: dict = None):
             'endpoint': data.get('endpoint')
         })
 
+def get_request_json():
+    """Безопасное получение JSON из запроса с любым Content-Type"""
+    if request.content_type == 'application/json':
+        return request.get_json(silent=True) or {}
+    elif request.content_type in ['application/x-www-form-urlencoded', 'multipart/form-data']:
+        return request.form.to_dict()
+    else:
+        # Пытаемся парсить как JSON независимо от Content-Type
+        try:
+            if request.data:
+                return json.loads(request.data.decode('utf-8'))
+        except:
+            pass
+        return {}
+
 def backup_database():
     try:
         # Бэкап ключей
@@ -349,7 +364,7 @@ def get_active_users():
 @app.route('/api/clean_old_keys', methods=['POST'])
 @require_admin
 def clean_old_keys():
-    data = request.get_json() or {}
+    data = get_request_json()
     days = int(data.get('days', 1))
     threshold = datetime.now(timezone.utc) - timedelta(days=days)
     
@@ -442,7 +457,7 @@ def verify_key():
 def save_user():
     update_stats('api_call', {'endpoint': 'save_user'})
     
-    data = request.json or {}
+    data = get_request_json()
     remote_ip = request.remote_addr or 'unknown_ip'
     if not validate_ip(remote_ip):
         remote_ip = 'unknown_ip'
@@ -528,7 +543,8 @@ def admin_login():
         return render_admin_page()
 
     if request.method == "POST":
-        passwrd = request.form.get("passwrd") or (request.get_json() or {}).get("passwrd")
+        data = get_request_json()
+        passwrd = request.form.get("passwrd") or data.get("passwrd")
         if not passwrd:
             return "Missing password", 400
 
@@ -730,7 +746,7 @@ def GetScript():
 @app.route('/api/delete_key', methods=['POST'])
 @require_admin
 def delete_key():
-    data = request.get_json() or {}
+    data = get_request_json()
     key = data.get('key')
     if not key or not validate_key(key):
         return 'Missing or invalid key', 400
@@ -744,7 +760,7 @@ def delete_key():
 @app.route('/api/delete_user', methods=['POST'])
 @require_admin
 def delete_user():
-    data = request.get_json() or {}
+    data = get_request_json()
     hwid = data.get('hwid')
     if not hwid or not validate_hwid(hwid):
         return 'Missing or invalid hwid', 400
