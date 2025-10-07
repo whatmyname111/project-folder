@@ -32,7 +32,7 @@ SUPABASE_HEADERS = {
 }
 
 # Regex
-KEY_REGEX = re.compile(r'^Tw3ch1k_[0-9oasuxclO68901\-]{16,}$')
+KEY_REGEX = re.compile(r'Apex_[a-f0-9]{35}$')
 HWID_REGEX = re.compile(r'^[0-9A-Fa-f\-]{5,}$')
 
 # Error messages
@@ -54,9 +54,6 @@ limiter = Limiter(get_remote_address, app=app, default_limits=['20 per minute'])
 # ----------------------
 # Utility functions
 # ----------------------
-def validate_key(key: str) -> bool:
-    return bool(KEY_REGEX.match(key))
-
 def validate_hwid(hwid: str) -> bool:
     return bool(HWID_REGEX.match(hwid))
 
@@ -73,16 +70,16 @@ def get_user_id(ip: str, hwid: str) -> str:
 def safe_html(s: str) -> str:
     return html.escape(s)
 
-def generate_key(length: int = 16) -> str:
-    chars_main = 'oasuxclO'
-    chars_digits = '68901'
-    num_digits = int(length * 0.7)
-    num_main = length - num_digits
-    key_chars = random.choices(chars_digits, k=num_digits) + random.choices(chars_main, k=num_main)
-    random.shuffle(key_chars)
-    key_str = ''.join(key_chars)
-    return "Tw3ch1k_" + "-".join([key_str[i:i+4] for i in range(0, len(key_str), 4)])
-
+def generate_key(length: int = 35) -> str:
+    chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    key_str = ''.join(random.choices(chars, k=length))
+    
+    # Хешируем через hashlib и берем первые 35 символов хеша
+    hashed_key = hashlib.sha256(key_str.encode()).hexdigest()[:35]
+    return f"Apex_{hashed_key}"
+def validate_key(key: str) -> bool:
+    # Проверяем формат: Apex_ + 35 hex символов
+    return bool(re.match(r'^Apex_[a-f0-9]{35}$', key))
 def cleanup_old_keys_and_users():
     while True:
         try:
