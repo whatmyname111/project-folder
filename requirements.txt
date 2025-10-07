@@ -5,3 +5,5 @@ python-dotenv
 requests
 python-dateutil
 gunicorn
+psutil
+flask-caching
