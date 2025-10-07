@@ -154,11 +154,10 @@ def require_admin(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
         secret = request.args.get('d')
-        if secret != SECRET_KEY or not session.get('admin_authenticated'):
-            return "Ur not admin!", 403
-        return f(*args, **kwargs)
+        if secret == SECRET_KEY or session.get('admin_authenticated'):
+            return f(*args, **kwargs)
+        return "Ur not admin!", 403
     return wrapper
-
 # ----------------------
 # API Routes
 # ----------------------
