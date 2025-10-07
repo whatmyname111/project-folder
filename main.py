@@ -16,7 +16,7 @@ import json
 from collections import defaultdict, deque
 from dotenv import load_dotenv
 from dateutil.parser import parse as parse_date
-from flask import Flask, request, jsonify, send_from_directory, session
+from flask import Flask, request, jsonify, send_from_directory, session, render_template_string
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_cors import CORS
@@ -54,14 +54,33 @@ USER_ROLES = {
 
 # Flask app
 app = Flask(__name__)
-app.secret_key = os.getenv("ADMIN_SESSION_KEY")
-app.config['SESSION_COOKIE_NAME'] = os.getenv("sskk")
+app.secret_key = SECRET_KEY or "fallback_secret_key"
+app.config['SESSION_COOKIE_NAME'] = os.getenv("sskk", "session")
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 
 CORS(app, resources={r"/api/*": {"origins": ["https://www.roblox.com", "https://*.robloxlabs.com"]}})
+
+# Лимитеры
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=['20 per minute']
+)
+
+# Кэширование
+cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
+cache.init_app(app)
+
+# Статистика в памяти
+stats_data = {
+    'daily_users': deque(maxlen=1000),
+    'key_verifications': deque(maxlen=5000),
+    'api_calls': defaultdict(int),
+    'errors': deque(maxlen=1000)
+}
 
 # ----------------------
 # Utility functions
@@ -90,10 +109,9 @@ def safe_html(s: str) -> str:
     return html.escape(s)
 
 def generate_key(length: int = 35) -> str:
-    chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
     key_str = ''.join(random.choices(chars, k=length))
-    hashed_key = hashlib.sha256(key_str.encode()).hexdigest()[:35]
-    return f"Apex_{hashed_key}"
+    return f"Apex_{key_str}"
 
 def trigger_webhooks(event_type: str, data: dict):
     for url in WEBHOOK_URLS:
@@ -125,21 +143,6 @@ def update_stats(event_type: str, data: dict = None):
             'error': data.get('error'),
             'endpoint': data.get('endpoint')
         })
-
-def get_request_json():
-    """Безопасное получение JSON из запроса с любым Content-Type"""
-    if request.content_type == 'application/json':
-        return request.get_json(silent=True) or {}
-    elif request.content_type in ['application/x-www-form-urlencoded', 'multipart/form-data']:
-        return request.form.to_dict()
-    else:
-        # Пытаемся парсить как JSON независимо от Content-Type
-        try:
-            if request.data:
-                return json.loads(request.data.decode('utf-8'))
-        except:
-            pass
-        return {}
 
 def backup_database():
     try:
@@ -202,7 +205,7 @@ def require_role(role):
         @wraps(f)
         def wrapper(*args, **kwargs):
             user_role = session.get('role', 'user')
-            if USER_ROLES[user_role] >= USER_ROLES[role]:
+            if USER_ROLES.get(user_role, 0) >= USER_ROLES.get(role, 0):
                 return f(*args, **kwargs)
             return "Access denied", 403
         return wrapper
@@ -224,7 +227,10 @@ def cleanup_old_keys_and_users():
                     key_value = key_entry.get('key')
                     if not created_at or not key_value:
                         continue
-                    created_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    try:
+                        created_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    except ValueError:
+                        continue
                     if created_dt < threshold:
                         try:
                             del_resp = requests.delete(
@@ -289,26 +295,6 @@ def save_key(key: str = None) -> str:
     return None
 
 # ----------------------
-# Инициализация после определения функций
-# ----------------------
-
-# Лимитеры (должны быть после определения get_hwid_identifier)
-limiter = Limiter(get_remote_address, app=app, default_limits=['20 per minute'])
-hwid_limiter = Limiter(get_hwid_identifier, app=app, default_limits=['100/day', '10/minute'])
-
-# Кэширование
-cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
-cache.init_app(app)
-
-# Статистика в памяти
-stats_data = {
-    'daily_users': deque(maxlen=1000),
-    'key_verifications': deque(maxlen=5000),
-    'api_calls': defaultdict(int),
-    'errors': deque(maxlen=1000)
-}
-
-# ----------------------
 # API Routes
 # ----------------------
 @app.route('/api/health')
@@ -364,7 +350,7 @@ def get_active_users():
 @app.route('/api/clean_old_keys', methods=['POST'])
 @require_admin
 def clean_old_keys():
-    data = get_request_json()
+    data = request.get_json() or {}
     days = int(data.get('days', 1))
     threshold = datetime.now(timezone.utc) - timedelta(days=days)
     
@@ -453,11 +439,11 @@ def verify_key():
     return 'error', 500, {'Content-Type': 'text/plain'}
 
 @app.route('/api/save_user', methods=['POST'])
-@hwid_limiter.limit('50/minute')
+@limiter.limit('50/minute')
 def save_user():
     update_stats('api_call', {'endpoint': 'save_user'})
     
-    data = get_request_json()
+    data = request.json or {}
     remote_ip = request.remote_addr or 'unknown_ip'
     if not validate_ip(remote_ip):
         remote_ip = 'unknown_ip'
@@ -536,15 +522,12 @@ def serve_css():
 # ----------------------
 @app.route('/user/admin', methods=['GET', 'POST'])
 def admin_login():
-    from flask import render_template_string  # Добавляем импорт
-    
     session.permanent = True
     if session.get('admin_authenticated'):
         return render_admin_page()
 
     if request.method == "POST":
-        data = get_request_json()
-        passwrd = request.form.get("passwrd") or data.get("passwrd")
+        passwrd = request.form.get("passwrd") or (request.get_json() or {}).get("passwrd")
         if not passwrd:
             return "Missing password", 400
 
@@ -746,7 +729,7 @@ def GetScript():
 @app.route('/api/delete_key', methods=['POST'])
 @require_admin
 def delete_key():
-    data = get_request_json()
+    data = request.get_json() or {}
     key = data.get('key')
     if not key or not validate_key(key):
         return 'Missing or invalid key', 400
@@ -760,7 +743,7 @@ def delete_key():
 @app.route('/api/delete_user', methods=['POST'])
 @require_admin
 def delete_user():
-    data = get_request_json()
+    data = request.get_json() or {}
     hwid = data.get('hwid')
     if not hwid or not validate_hwid(hwid):
         return 'Missing or invalid hwid', 400
