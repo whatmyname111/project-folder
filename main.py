@@ -63,22 +63,6 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 
 CORS(app, resources={r"/api/*": {"origins": ["https://www.roblox.com", "https://*.robloxlabs.com"]}})
 
-# Лимитеры
-limiter = Limiter(get_remote_address, app=app, default_limits=['20 per minute'])
-hwid_limiter = Limiter(get_hwid_identifier, app=app, default_limits=['100/day', '10/minute'])
-
-# Кэширование
-cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
-cache.init_app(app)
-
-# Статистика в памяти
-stats_data = {
-    'daily_users': deque(maxlen=1000),
-    'key_verifications': deque(maxlen=5000),
-    'api_calls': defaultdict(int),
-    'errors': deque(maxlen=1000)
-}
-
 # ----------------------
 # Utility functions
 # ----------------------
@@ -288,6 +272,26 @@ def save_key(key: str = None) -> str:
     except requests.RequestException as e:
         update_stats('error', {'error': str(e), 'endpoint': 'save_key'})
     return None
+
+# ----------------------
+# Инициализация после определения функций
+# ----------------------
+
+# Лимитеры (должны быть после определения get_hwid_identifier)
+limiter = Limiter(get_remote_address, app=app, default_limits=['20 per minute'])
+hwid_limiter = Limiter(get_hwid_identifier, app=app, default_limits=['100/day', '10/minute'])
+
+# Кэширование
+cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
+cache.init_app(app)
+
+# Статистика в памяти
+stats_data = {
+    'daily_users': deque(maxlen=1000),
+    'key_verifications': deque(maxlen=5000),
+    'api_calls': defaultdict(int),
+    'errors': deque(maxlen=1000)
+}
 
 # ----------------------
 # API Routes
@@ -517,6 +521,8 @@ def serve_css():
 # ----------------------
 @app.route('/user/admin', methods=['GET', 'POST'])
 def admin_login():
+    from flask import render_template_string  # Добавляем импорт
+    
     session.permanent = True
     if session.get('admin_authenticated'):
         return render_admin_page()
@@ -542,7 +548,6 @@ def admin_login():
         </form>
     '''
 
-@require_admin
 def render_admin_page():
     try:
         keys_resp = requests.get(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, timeout=5)
