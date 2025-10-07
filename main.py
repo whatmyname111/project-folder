@@ -108,9 +108,10 @@ def get_user_id(ip: str, hwid: str) -> str:
 def safe_html(s: str) -> str:
     return html.escape(s)
 
-def generate_key(length: int = 35) -> str:
-    chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-    key_str = ''.join(random.choices(chars, k=length))
+def generate_key() -> str:
+    """Генерирует ключ в формате Apex_ + 35 hex символов"""
+    chars = 'abcdef0123456789'
+    key_str = ''.join(random.choices(chars, k=35))
     return f"Apex_{key_str}"
 
 def trigger_webhooks(event_type: str, data: dict):
@@ -283,14 +284,18 @@ def save_key(key: str = None) -> str:
     key = key or generate_key()
     payload = {
         'key': key,
-        'created_at': datetime.now().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'used': False
     }
     try:
         resp = requests.post(f"{SUPABASE_URL}/rest/v1/keys", headers=SUPABASE_HEADERS, json=payload, timeout=5)
-        if resp.status_code == 201:
+        if resp.status_code in [200, 201]:
+            print(f"Key saved successfully: {key}")
             return key
+        else:
+            print(f"Failed to save key: {resp.status_code} - {resp.text}")
     except requests.RequestException as e:
+        print(f"Request error saving key: {e}")
         update_stats('error', {'error': str(e), 'endpoint': 'save_key'})
     return None
 
@@ -383,7 +388,7 @@ def clean_old_keys():
 
 @app.route('/api/verify_key')
 @limiter.limit('20/minute')
-@cache.cached(timeout=30, query_string=True)
+@cache.cached(timeout=21600, query_string=True)  # 6 часов кэша
 def verify_key():
     update_stats('api_call', {'endpoint': 'verify_key'})
     
